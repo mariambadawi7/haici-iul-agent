@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply text-ink-100 font-sans antialiased;
+    background:
+      /* warm parchment vignette */
+      radial-gradient(900px 600px at 50% -20%, rgba(201, 160, 99, 0.08), transparent 60%),
+      radial-gradient(700px 500px at 100% 110%, rgba(95, 191, 182, 0.05), transparent 65%),
+      /* subtle linen weave */
+      repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.008) 0 1px,
+        transparent 1px 6px
+      ),
+      #0c0f1a;
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-serif tracking-tight;
+  }
+  ::selection {
+    background: rgba(201, 160, 99, 0.35);
+    color: #fff;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(201, 160, 99, 0.18);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(201, 160, 99, 0.35);
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-bg-panel/85 backdrop-blur-xl border border-bg-border;
+  }
+  .panel-elevated {
+    @apply bg-bg-elevated/90 backdrop-blur-xl border border-bg-border shadow-soft;
+  }
+  .divider-gold {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(201, 160, 99, 0.45),
+      transparent
+    );
+    @apply h-px;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 font-medium tracking-wide transition
+           focus:outline-none focus:ring-2 focus:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn text-bg-base bg-accent hover:bg-accent-glow shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn text-ink-300 hover:bg-white/5 border border-bg-border;
+  }
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-11 h-11 rounded-md text-ink-300
+           border border-transparent hover:border-bg-border hover:bg-white/5 transition
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .input {
+    @apply w-full bg-bg-elevated/80 border border-bg-border rounded-md px-4 py-3
+           text-ink-100 placeholder:text-ink-500 focus:outline-none focus:border-accent/70
+           focus:ring-2 focus:ring-accent/20 transition;
+  }
+  .chip {
+    @apply text-xs px-3 py-1 rounded-full border border-bg-border bg-bg-elevated/60 text-ink-300
+           hover:border-accent/40 hover:text-accent transition cursor-pointer;
+  }
+  .badge-serif {
+    @apply font-serif italic text-ink-500 text-[11px] tracking-widest uppercase;
+    letter-spacing: 0.28em;
+  }
+}

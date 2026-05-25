@@ -1,0 +1,765 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-agent",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "d96af72c-5b7c-4564-a52d-ff83c3597e86",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        2448
+      ],
+      "webhookId": "rag-agent-webhook"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cond-audio",
+                    "leftValue": "={{ $binary && Object.keys($binary).length > 0 }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cond-text",
+                    "leftValue": "={{ !$binary || Object.keys($binary).length === 0 }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a64e32b-e243-43da-968f-acab89765824",
+      "name": "Switch (Audio or Text)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1376,
+        2448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Whatever key n8n stored the upload under (data, data0, file, …),\n// make sure it's reachable as `data0` so downstream nodes don't care.\nconst items = $input.all();\nfor (const item of items) {\n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0 && !item.binary.data0) {\n      item.binary.data0 = item.binary[keys[0]];\n    }\n  }\n}\nreturn items;"
+      },
+      "id": "8576acac-696e-47c1-b394-ff62d3c6aa28",
+      "name": "Normalize Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://whisper:8000/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer not-needed"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data0"
+            },
+            {
+              "name": "model",
+              "value": "base"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "0bd85ecc-a852-42eb-bc3c-c3974d496d9d",
+      "name": "Local Whisper (STT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1776,
+        2304
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-ut-a",
+              "name": "userText",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f210e610-fe2c-4da3-8eef-20a762257b9f",
+      "name": "Set userText (Audio)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        2400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-ut-t",
+              "name": "userText",
+              "value": "={{ $json.body?.text || $json.body?.chatInput || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "00154da0-ab8b-4236-81b1-21cf77f9f25f",
+      "name": "Set userText (Text)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1984,
+        2592
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=user message :\n{{ $json.userText }}",
+        "options": {
+          "systemMessage": "You are a friendly customer-support assistant for the Islamic University of Lebanon (IUL).\n\nTOOL USAGE RULES:\n- For any factual question about IUL — its faculties, campuses, history, founding vision, accreditation, programs, admissions, languages of instruction, student life, specific people or dates — you MUST call the Search_Local_Documents tool first with the user's question as the search query. NEVER pass an empty query. If the tool returns nothing useful, say you could not find that information rather than guessing.\n- For greetings, small talk, thanks, goodbyes, or clarification requests about your previous answer, reply directly without calling the tool.\n- When you introduce yourself, say you are the IUL Agent and you can answer questions about the Islamic University of Lebanon.\n\nVOICE FORMAT RULES:\n- No markdown, no asterisks, no hashtags, no bullet points, no emojis.\n- Use natural spoken transitions like First, Next, and Finally.\n- Keep sentences short and conversational.\n- Two to four short sentences is usually enough."
+        }
+      },
+      "id": "beb34003-818d-46ce-a84b-8a898b8b325e",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2256,
+        2448
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body?.sessionId || 'default-session' }}",
+        "contextWindowLength": 10
+      },
+      "id": "f89376e7-0e0b-4ff0-bb6c-3e4349bb760e",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2272,
+        2688
+      ]
+    },
+    {
+      "parameters": {
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "local_docs",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "dd0be41a-1f89-447a-a7a4-099fc899ce79",
+      "name": "Qdrant Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        2912
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "utp8208FXQyS33EP",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "id": "6389acac-e67e-4415-86d0-373d98e7a12c",
+      "name": "Ollama Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        3104
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "ybeAuY8rLUwFESFs",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "Search_Local_Documents",
+        "description": "Search the IUL knowledge base for factual information about the Islamic University of Lebanon — faculties, campuses, history, accreditation, programs, admissions, languages of instruction. The input should be the user's question or a few keywords from it. Never pass an empty string."
+      },
+      "id": "da1a520b-afb5-442b-9de2-d6c89ad4fc7d",
+      "name": "Search_Local_Documents",
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        2688
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e2075fbd-33eb-47fb-b310-ed7f54048c1e",
+      "name": "Gemini (Tool LLM)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        2752,
+        3072
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8CCAGWb187BYrp2c",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0c027208-4b64-4f52-b7e2-92a529745fb8",
+      "name": "Gemini (Agent LLM)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        2864
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8CCAGWb187BYrp2c",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "keep-a",
+              "name": "answer",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "keep-q",
+              "name": "question",
+              "value": "={{ $('Set userText (Audio)').isExecuted ? $('Set userText (Audio)').first().json.userText : ($('Set userText (Text)').isExecuted ? $('Set userText (Text)').first().json.userText : '') }}",
+              "type": "string"
+            },
+            {
+              "id": "keep-wants-audio",
+              "name": "wantsAudio",
+              "value": "={{ String($('Webhook').item.json.body?.wantsAudio) !== 'false' }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e8a70d2d-89c9-4715-b8f4-86802a234600",
+      "name": "Keep Answer Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2592,
+        2448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-want-audio",
+              "leftValue": "={{ $json.wantsAudio }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fe363f7b-4789-4aa9-bbc6-1151f57c6750",
+      "name": "IF (wantsAudio?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2800,
+        2448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://piper:5000",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/plain"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "body": "={{ $json.answer }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "005ee47a-d4c1-47a4-a7f9-20c92fd33778",
+      "name": "Local Piper (TTS)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3008,
+        2304
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const answer = $('Keep Answer Text').first().json.answer;\nconst question = $('Keep Answer Text').first().json.question;\n\nconst binaryData = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst audioBase64 = binaryData.toString('base64');\n\nreturn [{\n  json: {\n    answer,\n    question: question || '',\n    audioMime: 'audio/wav',\n    audioBase64\n  }\n}];"
+      },
+      "id": "75066b3b-5fdc-48c5-b66b-d0ec376fe025",
+      "name": "Build JSON (Text + Audio)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3216,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"answer\": $json.answer, \"question\": $json.question, \"audioMime\": $json.audioMime, \"audioBase64\": $json.audioBase64 } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5db255a4-de96-4a4b-8c4c-44e5cdca8f30",
+      "name": "Respond (Text + Audio)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3424,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"answer\": $json.answer, \"question\": $json.question } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ae064f90-0e01-4d4c-b775-9ab9f533edba",
+      "name": "Respond (Text Only)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3168,
+        2608
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"answer\": ('Sorry — the assistant hit a problem at ' + ($json.error?.node?.name || 'an internal step') + '. ' + ($json.error?.message || '')), \"error\": ($json.error?.message || 'unknown'), \"stage\": ($json.error?.node?.name || 'unknown') } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              }
+            ]
+          }
+        }
+      },
+      "id": "26eaddee-c4c8-484c-9bf9-250352e4b672",
+      "name": "Respond (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2592,
+        2112
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch (Audio or Text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch (Audio or Text)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set userText (Text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Binary": {
+      "main": [
+        [
+          {
+            "node": "Local Whisper (STT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Local Whisper (STT)": {
+      "main": [
+        [
+          {
+            "node": "Set userText (Audio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set userText (Audio)": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set userText (Text)": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Keep Answer Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store": {
+      "ai_vectorStore": [
+        [
+          {
+            "node": "Search_Local_Documents",
+            "type": "ai_vectorStore",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search_Local_Documents": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini (Tool LLM)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Search_Local_Documents",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini (Agent LLM)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Answer Text": {
+      "main": [
+        [
+          {
+            "node": "IF (wantsAudio?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (wantsAudio?)": {
+      "main": [
+        [
+          {
+            "node": "Local Piper (TTS)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Text Only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Local Piper (TTS)": {
+      "main": [
+        [
+          {
+            "node": "Build JSON (Text + Audio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Text Only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build JSON (Text + Audio)": {
+      "main": [
+        [
+          {
+            "node": "Respond (Text + Audio)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8bdbf1bc91037a165582246937af5b6fa5fdc2fc8711ad6e0194ee5b94944d65"
+  }
+}

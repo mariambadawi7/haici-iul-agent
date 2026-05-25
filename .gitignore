@@ -1,0 +1,9 @@
+n8n_local_data/
+ollama_data/
+piper_data/
+qdrant_data/
+whisper_data/
+web/node_modules/
+web/dist/
+*.mp3
+*.webm

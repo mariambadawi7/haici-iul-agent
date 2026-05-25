@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Asia/Beirut
+      - TZ=Asia/Beirut
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_RUNNERS_ENABLED=true
+      - OLLAMA_HOST=http://ollama:11434
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - EXECUTIONS_TIMEOUT=300
+      - EXECUTIONS_TIMEOUT_MAX=600
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+      - NODES_EXCLUDE=
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_RESTRICT_FILE_ACCESS_TO=/shared_docs
+      # CORS — required for the browser UI at http://localhost:5173 to call
+      # the webhook. Without this, ANY n8n error response (workflow inactive,
+      # internal exception, preflight, etc.) ships without CORS headers and
+      # the browser reports it as "Cross-Origin Request Blocked / Status (null)".
+      - N8N_CORS_ALLOW_ORIGIN=*
+    volumes:
+      - ./n8n_local_data:/home/node/.n8n
+      - ./shared_docs:/shared_docs
+    depends_on:
+      - qdrant
+      - ollama
+      - whisper
+      - piper
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: always
+    ports:
+      - "11435:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+    # Uncomment if you have an Nvidia GPU:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ── LOCAL SPEECH-TO-TEXT (Whisper) ──────────────────────────────
+  # OpenAI-compatible API: POST /v1/audio/transcriptions
+  # From n8n: http://whisper:8000
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    container_name: whisper
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER__MODEL=base
+      - WHISPER__INFERENCE_DEVICE=cpu
+    volumes:
+      - ./whisper_data:/root/.cache/huggingface
+
+  # ── LOCAL TEXT-TO-SPEECH (Piper) ───────────────────────────────
+  # Simple HTTP API: POST http://piper:5000  (raw text body → WAV audio)
+  # English voice. Change MODEL_DOWNLOAD_LINK for other languages.
+  piper:
+    image: artibex/piper-http:latest
+    container_name: piper
+    restart: always
+    ports:
+      - "5500:5000"
+    environment:
+      - MODEL_DOWNLOAD_LINK=https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx?download=true
+    volumes:
+      - ./piper_data:/app/models
+
+  # ── WEB UI (Vite + React + TS + Tailwind, run with Bun) ─────────
+  # Dev server with HMR. Source mounted from ./web; node_modules kept
+  # in an anonymous volume so the host bind-mount doesn't shadow them.
+  web:
+    build: ./web
+    container_name: web
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      # Relative URL — Vite proxies /webhook/* to the n8n container internally,
+      # which means the browser sees a same-origin request and CORS is never
+      # involved. See web/vite.config.ts for the proxy config.
+      - VITE_N8N_WEBHOOK_URL=/webhook/rag-agent
+      - VITE_APP_TITLE=IUL Agent
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    depends_on:
+      - n8n
