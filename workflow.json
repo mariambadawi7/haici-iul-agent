@@ -531,6 +531,23 @@
         2352,
         2576
       ]
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        3536
+      ],
+      "id": "45482028-8a37-481e-ad16-36d0082a9743",
+      "name": "Embeddings Google Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8CCAGWb187BYrp2c",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     }
   ],
   "connections": {
@@ -755,10 +772,16 @@
           }
         ]
       ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        []
+      ]
     }
   },
   "pinData": {},
   "meta": {
+    "templateCredsSetupCompleted": true,
     "instanceId": "8bdbf1bc91037a165582246937af5b6fa5fdc2fc8711ad6e0194ee5b94944d65"
   }
 }
