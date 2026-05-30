@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight, Mic } from "lucide-react";
 import { useState } from "react";
-import AnimatedFace from "./AnimatedFace";
 
 interface Props {
   onBegin: () => void;
@@ -62,17 +61,22 @@ export default function LandingPage({ onBegin }: Props) {
       </section>
       {/* ---------------------------------------------------- */}
 
-      {/* Main Content Area - Now perfectly centered without the redundant text! */}
+      {/* Main Content Area */}
       <div className="flex-1 w-full flex flex-col items-center justify-center p-8">
 
-        {/* Robot Avatar */}
+ {/* Mascot Avatar - Increased size for 'Hero' effect */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
+          initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.1 }}
           className="mb-10"
         >
-          <AnimatedFace state="idle" amplitude={0} />
+          <img 
+            src="/mascot_avatar.png" 
+            alt="IUL Agent Mascot"
+            // Changed from w-48/h-48 to w-72/h-72 for that zoomed-in "Hero" look
+            className="w-72 h-72 md:w-80 md:h-80 object-contain drop-shadow-2xl"
+          />
         </motion.div>
 
         {/* CTA Button */}
