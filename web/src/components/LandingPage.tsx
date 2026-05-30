@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import { ArrowRight, Mic } from "lucide-react";
 import { useState } from "react";
 import AnimatedFace from "./AnimatedFace";
-import { config } from "../lib/api";
 
 interface Props {
   onBegin: () => void;
@@ -23,108 +22,82 @@ export default function LandingPage({ onBegin }: Props) {
       initial={{ opacity: 0 }}
       animate={{ opacity: leaving ? 0 : 1, scale: leaving ? 0.97 : 1 }}
       transition={{ duration: 0.45, ease: "easeInOut" }}
-      className="h-screen w-screen flex flex-col items-center justify-between px-8 py-10 overflow-hidden"
+      className="h-screen w-screen flex flex-col items-center overflow-hidden bg-[#f8fafc]"
     >
-      {/* Top crest with both logos */}
-      <div className="w-full flex items-center justify-between max-w-5xl">
-        <LogoBlock
-          src={config.logoLeft}
-          fallback="C"
-          line1="Research Center"
-          line2="Center for Studies"
-        />
-        <div className="text-center">
-          <div className="badge-serif">Anno · MMXXVI</div>
+      
+      {/* --- UNIFIED BRAND STRIP --- */}
+      <section className="w-full brand-strip panel-elevated border-b border-bg-border shrink-0">
+        <div className="brand-row">
+          
+          {/* Left: IUL Logo */}
+          <div className="brand-icon-wrap">
+            <img
+              src="/iul_logo.png"
+              alt="IUL Logo"
+              className="brand-icon"
+            />
+          </div>
+          
+          {/* Center: Title */}
+          <div className="brand-copy">
+            <div className="brand-label">IUL • HAICI</div>
+            <h2 className="brand-heading">IUL Agent</h2>
+            <p className="brand-subtitle">
+              Premium robot assistant design for intelligent campus guidance.
+            </p>
+          </div>
+          
+          {/* Right: HAICI Logo */}
+          <div className="brand-right-actions flex items-center gap-3 md:gap-5">
+            <div className="brand-icon-wrap hidden sm:block">
+              <img
+                src="/haici_logo.png"
+                alt="HAICI Logo"
+                className="brand-icon"
+              />
+            </div>
+          </div>
+
         </div>
-        <LogoBlock
-          src={config.logoRight}
-          fallback="IUL"
-          line1="Islamic University"
-          line2="of Lebanon"
-          align="right"
-        />
-      </div>
+      </section>
+      {/* ---------------------------------------------------- */}
 
-      {/* Center hero */}
-      <div className="flex flex-col items-center text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="mb-6"
-        >
-          <div className="badge-serif">Multimodal Assistant</div>
-          <h1 className="font-serif text-5xl md:text-6xl text-ink-100 mt-3 leading-tight">
-            {config.title}
-          </h1>
-          <div className="mx-auto mt-3 w-32 divider-gold" />
-          <p className="font-serif italic text-ink-300 mt-4 text-base max-w-xl">
-            A guide to the faculties, campuses, history, and accreditation
-            of the Islamic University of Lebanon — by voice or by text.
-          </p>
-        </motion.div>
+      {/* Main Content Area - Now perfectly centered without the redundant text! */}
+      <div className="flex-1 w-full flex flex-col items-center justify-center p-8">
 
+        {/* Robot Avatar */}
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
+          transition={{ duration: 0.8, delay: 0.1 }}
+          className="mb-10"
         >
-          <AnimatedFace state="idle" />
+          <AnimatedFace state="idle" amplitude={0} />
         </motion.div>
-      </div>
 
-      {/* CTA */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.45 }}
-        className="flex flex-col items-center gap-3"
-      >
-        <button
-          onClick={begin}
-          className="group inline-flex items-center gap-3 px-8 py-3.5 rounded-md
-                     bg-accent text-bg-base font-semibold tracking-wide
-                     hover:bg-accent-glow shadow-glow-strong transition"
+        {/* CTA Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="flex flex-col items-center gap-3"
         >
-          <Mic className="w-5 h-5" />
-          Begin Conversation
-          <ArrowRight className="w-4 h-4 -mr-1 transition group-hover:translate-x-1" />
-        </button>
-        <div className="text-[11px] text-ink-500 tracking-widest uppercase">
-          Press to start · the assistant will greet you
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
+          <button
+            onClick={begin}
+            className="group inline-flex items-center gap-3 px-8 py-4 rounded-xl
+                       bg-teal-600 text-white font-semibold tracking-wide text-lg
+                       hover:bg-teal-500 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+          >
+            <Mic className="w-5 h-5" />
+            Begin Conversation
+            <ArrowRight className="w-5 h-5 -mr-1 transition group-hover:translate-x-1" />
+          </button>
+          <div className="text-[12px] text-ink-500 tracking-widest uppercase mt-2">
+            Press to start · the assistant will greet you
+          </div>
+        </motion.div>
 
-function LogoBlock({
-  src,
-  fallback,
-  line1,
-  line2,
-  align,
-}: {
-  src: string;
-  fallback: string;
-  line1: string;
-  line2: string;
-  align?: "right";
-}) {
-  const right = align === "right";
-  return (
-    <div className={`flex items-center gap-3 ${right ? "flex-row-reverse" : ""}`}>
-      {src ? (
-        <img src={src} alt="" className="h-14 w-14 object-contain" />
-      ) : (
-        <div className="h-14 w-14 rounded-sm border border-accent/40 bg-gradient-to-br from-bg-elevated to-bg-panel grid place-items-center">
-          <span className="font-serif text-accent text-lg italic">{fallback}</span>
-        </div>
-      )}
-      <div className={`leading-tight ${right ? "text-right" : ""}`}>
-        <div className="badge-serif">{line1}</div>
-        <div className="text-sm font-serif text-ink-100 mt-0.5">{line2}</div>
       </div>
-    </div>
+    </motion.div>
   );
 }

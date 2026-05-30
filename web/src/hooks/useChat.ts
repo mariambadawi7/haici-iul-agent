@@ -270,7 +270,7 @@ export function useChat({ wantsAudio, onAudio }: UseChatOpts) {
           createdAt: Date.now(),
           failed: assistantFailed,
           errorMessage: assistantFailed
-            ? `Workflow stage: ${reply.stage ?? "unknown"}`
+            ? `Workflow stage: ${reply.stage ?? "unknown"}${reply.error ? ` — ${reply.error}` : ""}`
             : undefined,
         });
 

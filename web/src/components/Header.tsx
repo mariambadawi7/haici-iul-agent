@@ -51,36 +51,16 @@ export default function Header({ onHome, health }: Props) {
           </div>
         </div>
 
-        {/* Right — IUL logo + home button */}
-        <div className="flex items-center gap-3 min-w-[220px] justify-end">
+        <div className="flex items-center gap-3 min-w-[120px] justify-end">
           {onHome && (
             <button
               onClick={onHome}
-              className="btn-icon"
+              className="btn-icon text-slate-700 bg-slate-100/90 border-slate-200/80"
               title="Back to welcome screen"
               type="button"
             >
               <Home className="w-5 h-5" />
             </button>
-          )}
-          <div className="leading-tight text-right">
-            <div className="badge-serif">Islamic University</div>
-            <div className="text-sm font-serif text-ink-100 mt-0.5">
-              of Lebanon
-            </div>
-          </div>
-          {config.logoRight ? (
-            <img
-              src={config.logoRight}
-              alt="IUL logo"
-              className="h-12 w-12 object-contain"
-            />
-          ) : (
-            <div className="h-12 w-12 rounded-sm border border-accent/40 bg-gradient-to-br from-bg-elevated to-bg-panel grid place-items-center">
-              <span className="font-serif text-accent text-base font-semibold">
-                IUL
-              </span>
-            </div>
           )}
         </div>
       </div>

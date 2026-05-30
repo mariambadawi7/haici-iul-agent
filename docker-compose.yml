@@ -53,13 +53,13 @@ services:
     volumes:
       - ./ollama_data:/root/.ollama
     # Uncomment if you have an Nvidia GPU:
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
 
   # ── LOCAL SPEECH-TO-TEXT (Whisper) ──────────────────────────────
   # OpenAI-compatible API: POST /v1/audio/transcriptions
