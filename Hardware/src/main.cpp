@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 
 // =============================================================================
 //  WIRING GUIDE
@@ -70,7 +71,7 @@
 
 // ── Timing ────────────────────────────────────────────────────────────────────
 #define BTN_DEBOUNCE_MS        50
-#define BTN_LONGPRESS_MS      800
+#define BTN_LONGPRESS_MS     2000   // hold Red this long (2 s) to open AP config
 #define ULTRASONIC_POLL_MS    500
 #define WS_RECONNECT_MS      5000
 #define HEARTBEAT_MS        30000
@@ -217,6 +218,7 @@ static int pollBtn(Btn& b) {
 
 // ── AP config portal ──────────────────────────────────────────────────────────
 static WebServer     apServer(80);
+static DNSServer     dnsServer;          // captive-portal DNS so the page auto-opens
 static unsigned long apStartedMs = 0;
 
 static const char AP_HTML[] PROGMEM = R"html(
@@ -372,14 +374,21 @@ static void startAPMode() {
   appState    = AppState::AP_CONFIG;
   apStartedMs = millis();
 
-  Serial.printf("[AP] SSID: HAICI-Config  IP: %s\n",
-                WiFi.softAPIP().toString().c_str());
+  IPAddress apIP = WiFi.softAPIP();
+  Serial.printf("[AP] SSID: HAICI-Config  IP: %s\n", apIP.toString().c_str());
   Serial.println("[AP] Password: haici1234");
   Serial.println("[AP] Open http://192.168.4.1 in a browser to configure");
 
-  apServer.on("/",     HTTP_GET,  handleAPRoot);
+  // Captive-portal DNS: resolve every hostname to the ESP so the phone's
+  // "sign in to network" check fires and pops the config page automatically.
+  dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+  dnsServer.start(53, "*", apIP);
+
   apServer.on("/scan", HTTP_GET,  handleScan);
   apServer.on("/save", HTTP_POST, handleAPSave);
+  apServer.on("/",     HTTP_GET,  handleAPRoot);
+  // Any other path (incl. OS captive-portal probes) returns the config page.
+  apServer.onNotFound(handleAPRoot);
   apServer.begin();
 }
 
@@ -612,6 +621,7 @@ void loop() {
 
   // AP config portal mode
   if (appState == AppState::AP_CONFIG) {
+    dnsServer.processNextRequest();
     apServer.handleClient();
     setLed(millis() % 1000 < 500, false, false);   // blink red
     if (millis() - apStartedMs > AP_TIMEOUT_MS) {
@@ -623,6 +633,11 @@ void loop() {
 
   // Buttons always polled, even while connecting
   handleButtons();
+
+  // A long-press of Red inside handleButtons() may have just switched us into
+  // AP config mode (which disconnects WiFi). Bail out now so the WiFi watchdog
+  // below does NOT clobber appState back to CONNECTING_WIFI.
+  if (appState == AppState::AP_CONFIG) return;
 
   // WiFi watchdog
   if (WiFi.status() != WL_CONNECTED) {

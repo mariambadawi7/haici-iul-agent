@@ -25,7 +25,7 @@
 ### Buttons
 One leg of each button → GPIO listed. Other leg → GND. `INPUT_PULLUP` enabled in firmware (active LOW, no resistor needed).
 
-| Button color | ESP32 GPIO | Short press | Long press (800 ms) |
+| Button color | ESP32 GPIO | Short press | Long press (hold 2 s) |
 |-------------|-----------|-------------|----------------------|
 | Red | GPIO 32 | Send `new_session` to chatbot | Open AP WiFi/WS config portal |
 | Yellow | GPIO 33 | Start mic recording; press again = stop + send audio | — |
@@ -125,7 +125,12 @@ ESP32                      ws-server.ts :3001                 Browser tab
 5. Submit → ESP32 saves to NVS and reboots.
 6. After reboot: Red LED (connecting) → Blue LED (WiFi up, finding WS) → **Green LED** (all good).
 
-To re-enter config at any time: **long-press the Red button** for 800 ms.
+To re-enter config at any time: **hold the Red button for 2 seconds**. The Red
+LED will start **blinking** to confirm AP config mode is active.
+
+Once you join the `HAICI-Config` hotspot, the config page should **pop up
+automatically** (captive-portal DNS). If it doesn't, open **http://192.168.4.1**
+manually — any address you type will redirect to the config page.
 
 ### How the WiFi scan works
 In config mode the ESP32 runs in `WIFI_AP_STA` mode, so it can scan for networks
