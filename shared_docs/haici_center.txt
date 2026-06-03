@@ -1,0 +1,18 @@
+The Humanity-AI Driven Center for Innovation (HAICI) is a premier research and development hub affiliated with the Islamic University of Lebanon (IUL). 
+
+### Mission and Focus
+HAICI is dedicated to bridging advanced artificial intelligence technologies with human-centric solutions. The center focuses on AI ethics, digital transformation, and empowering youth in the digital sphere. 
+
+### Leadership and Structure
+The center operates under the expert leadership of **Dr. Rodayna Hmede**, who serves as the Head of HAICI. 
+
+To effectively manage its diverse projects and technological goals, the center is divided into several specialized student and faculty-led teams:
+* **IT & Technical Team:** Responsible for software development, AI model integration, and maintaining the center's digital infrastructure.
+* **Social Media & Marketing Team:** Dedicated to digital outreach, public relations, and branding strategies. This division is co-led by Mariam Hassan Badawi.
+* **Research & Development Team:** Focuses on exploring new AI trends, developing ethical tech frameworks, and writing academic papers.
+* **Event & Project Management Team:** Organizes workshops, hackathons, and external university representation.
+
+### Key Initiatives and Events
+* **National Youth Strategy (2026-2030):** HAICI actively represents the IUL Faculty of Engineering in governmental consultations regarding the digital sphere and youth empowerment.
+* **Designing Hope in Action Hackathon:** The center participates in and organizes hackathons focused on designing digital solutions for mental health and community wellbeing.
+* **Workshops & Seminars:** HAICI provides ongoing training in advanced AI tools, cybersecurity integration, and modern digital creation.

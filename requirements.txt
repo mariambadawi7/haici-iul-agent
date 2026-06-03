@@ -1,0 +1,14 @@
+minirag-hku
+sentence-transformers
+faster-whisper
+sounddevice
+scipy
+piper-tts
+requests
+Pillow
+python-docx
+PyPDF2
+rouge
+json-repair
+tiktoken
+nltk

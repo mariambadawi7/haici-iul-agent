@@ -1,0 +1,42 @@
+import { defineConfig, type PluginOption } from "vite";
+import react from "@vitejs/plugin-react";
+import basicSsl from "@vitejs/plugin-basic-ssl";
+
+const N8N_TARGET = process.env.N8N_TARGET || "http://n8n:5678";
+
+// HTTPS is only needed for microphone access on MOBILE (accessed by LAN IP).
+// On the kiosk machine itself (http://localhost) the browser already treats
+// localhost as a secure context, so the mic works without TLS — and a plain
+// http page can open ws:// to the relay with no mixed-content/cert friction.
+// Set VITE_HTTPS=1 to enable the self-signed cert for mobile testing.
+const USE_HTTPS = process.env.VITE_HTTPS === "1";
+
+const plugins: PluginOption[] = [react()];
+if (USE_HTTPS) plugins.push(basicSsl());
+
+export default defineConfig({
+  plugins,
+  server: {
+    host: "0.0.0.0",
+    port: 5173,
+    strictPort: true,
+    watch: { usePolling: true },
+    proxy: {
+      "/webhook": {
+        target: N8N_TARGET,
+        changeOrigin: true,
+        timeout: 120_000,
+      },
+      "/webhook-test": {
+        target: N8N_TARGET,
+        changeOrigin: true,
+        timeout: 120_000,
+      },
+      "/stt": {
+        target: process.env.WHISPER_TARGET || "http://whisper:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/stt/, ""),
+      },
+    },
+  },
+});
