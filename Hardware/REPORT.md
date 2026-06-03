@@ -29,9 +29,13 @@ One leg of each button → GPIO listed. Other leg → GND. `INPUT_PULLUP` enable
 |-------------|-----------|-------------|----------------------|
 | Red | GPIO 32 | Send `new_session` to chatbot | Open AP WiFi/WS config portal |
 | Yellow | GPIO 33 | Start mic recording; press again = stop + send audio | — |
-| Blue | GPIO 35 | Stop agent speaking / cancel recording | — |
+| Blue | GPIO 4 | Stop agent speaking / cancel recording | — |
 
-> GPIO 35 is input-only on ESP32 — fine for a button.
+> ⚠ **Do not use GPIO 34/35/36/39 for buttons.** Those pins are input-only and
+> have **no internal pull-up resistor**, so `INPUT_PULLUP` silently leaves them
+> floating and the button reads garbage. The Blue button uses GPIO 4 (a normal
+> pin with a working internal pull-up). If you must use 34–39, add an external
+> 10 kΩ pull-up resistor from the pin to 3.3 V.
 
 ---
 

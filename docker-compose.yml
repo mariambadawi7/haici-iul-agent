@@ -99,6 +99,9 @@ services:
     restart: unless-stopped
     ports:
       - "5173:5173"
+      # WebSocket relay (ws-server.ts) — the ESP32 connects directly to this
+      # over the LAN, bypassing Vite. Must be published to the host.
+      - "3001:3001"
     environment:
       # Relative URL — Vite proxies /webhook/* to the n8n container internally,
       # which means the browser sees a same-origin request and CORS is never

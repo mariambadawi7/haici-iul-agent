@@ -26,9 +26,11 @@
 //  |                    |          | Long press  = open WiFi/WS config AP   |
 //  | Yellow             | GPIO 33  | Press = start mic; press again = stop  |
 //  |                    |          |   and send recording to chatbot        |
-//  | Blue               | GPIO 35  | Press = stop speaking / cancel record  |
+//  | Blue               | GPIO 4   | Press = stop speaking / cancel record  |
 //  +--------------------+----------+----------------------------------------+
-//  Note: GPIO 35 is input-only on ESP32 -- perfectly fine for a button.
+//  IMPORTANT: GPIOs 34-39 are input-only and have NO internal pull-up.
+//  The Blue button therefore uses GPIO 4 (a normal pin with INPUT_PULLUP).
+//  Do not move it to 34/35/36/39 unless you add an external 10k pull-up.
 //
 //  HC-SR04 ULTRASONIC SENSOR
 //  +----------------+-----------+-------------------------------------------+
@@ -60,7 +62,7 @@
 
 #define PIN_BTN_RED           32
 #define PIN_BTN_YELLOW        33
-#define PIN_BTN_BLUE          35
+#define PIN_BTN_BLUE           4   // NOT 34-39: those pins have no internal pull-up
 
 #define PIN_ULTRASONIC_TRIG    5
 #define PIN_ULTRASONIC_ECHO   18
