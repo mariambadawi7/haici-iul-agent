@@ -6,6 +6,7 @@ import LandingPage from "./components/LandingPage";
 import HealthBanner from "./components/HealthBanner";
 import AnimatedFace from "./components/AnimatedFace";
 import { useChat } from "./hooks/useChat";
+import { useHardware } from "./hooks/useHardware";
 import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
@@ -58,6 +59,31 @@ export default function App() {
     if (stt.status === "recording") return "listening";
     return "idle";
   }, [tts.speaking, chat.pending, stt.status]);
+
+  useHardware({
+    faceState,
+    onNewSession: () => {
+      chat.createSession();
+      setView("chat");
+      setTimeout(() => chat.sendText("Hello!"), 120);
+    },
+    onStartRecord: () => {
+      if (stt.permission !== "granted") {
+        stt.requestPermission();
+      } else {
+        stt.start();
+      }
+    },
+    onStopRecord: async () => {
+      const result = await stt.stop();
+      if (result?.blob) {
+        chat.sendAudio(result.blob);
+      }
+    },
+    onStopSpeaking: () => {
+      tts.stop();
+    },
+  });
 
   const beginConversation = useCallback(() => {
     chat.createSession();

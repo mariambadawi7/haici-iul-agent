@@ -35,6 +35,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/stt/, ""),
       },
+      "/ws": {
+        target: "http://localhost:3001",
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 });
