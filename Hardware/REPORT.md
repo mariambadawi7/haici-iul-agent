@@ -17,7 +17,7 @@
 | LED color | ESP32 GPIO | LED state meaning |
 |-----------|-----------|-------------------|
 | Red | GPIO 25 | No WiFi connection (solid) / AP config mode (blinking) |
-| Blue | GPIO 26 | WiFi connected but WebSocket server unreachable |
+| Blue | GPIO 26 | Solid = WiFi OK, relay unreachable. Blinking = WiFi OK but internet behind a captive sign-in page |
 | Green | GPIO 27 | Fully connected — everything works |
 
 ---
@@ -117,7 +117,8 @@ ESP32                      ws-server.ts :3001                 Browser tab
 2. Connect your phone or laptop to that hotspot.
 3. Open **http://192.168.4.1** in a browser.
 4. Fill in:
-   - Your home/office WiFi SSID and password
+   - **WiFi network** — pick it from the **dropdown** (the ESP scans live; tap *Rescan* to refresh). 🔒 marks password-protected networks and the dBm value shows signal strength. For a hidden SSID, type it in the *manual* field instead (manual overrides the dropdown).
+   - WiFi password
    - The IP address of the machine running Docker (run `hostname -I` on it)
    - Port: `3001`
    - Path: `/ws?client=hardware`
@@ -125,6 +126,42 @@ ESP32                      ws-server.ts :3001                 Browser tab
 6. After reboot: Red LED (connecting) → Blue LED (WiFi up, finding WS) → **Green LED** (all good).
 
 To re-enter config at any time: **long-press the Red button** for 800 ms.
+
+### How the WiFi scan works
+In config mode the ESP32 runs in `WIFI_AP_STA` mode, so it can scan for networks
+(`/scan` endpoint → JSON) *while* still serving the config hotspot to your phone.
+The dropdown is populated by JavaScript on page load and on every *Rescan*.
+
+---
+
+## Captive-portal WiFi (networks with a "Sign in" page)
+
+Some public networks (campus, café, hotel) block traffic until a human opens a
+browser and clicks **Sign in / Accept**. A headless ESP32 cannot complete a
+credential or SMS login. Here is exactly what the firmware does:
+
+1. **Detection** — after connecting, the ESP probes
+   `http://connectivitycheck.gstatic.com/generate_204`.
+   - HTTP **204** → open internet, no portal.
+   - **Redirect / 200** → a captive portal is intercepting traffic.
+2. **Best-effort auto-accept** — for *simple click-through* "I accept the terms"
+   gateways, the ESP fetches the portal page, finds the first `<form action=…>`
+   and submits it. This clears trivial portals but **cannot** do username/password
+   or SMS-code logins.
+3. **The important part** — the **HAICI relay lives on your LAN**, and captive
+   portals gate *internet (WAN)* traffic, **not** LAN-to-LAN. So the ESP→relay
+   WebSocket — and therefore the whole button/voice/presence flow — **usually
+   works even on an un-signed-in captive network**. The chatbot's own internet
+   needs (LLM, etc.) are handled server-side on your Docker host, which you sign
+   in once.
+
+**LED hint:** if a captive portal is detected and the WebSocket isn't connected
+yet, the Blue LED **blinks** (instead of solid). Solid Blue = WiFi OK but relay
+unreachable; blinking Blue = WiFi OK but internet is behind a sign-in page.
+
+> If your network has **client isolation** enabled (LAN-to-LAN blocked too),
+> the ESP can't reach the relay at all — use a network without isolation, a
+> phone hotspot, or a dedicated AP for the kiosk.
 
 ---
 

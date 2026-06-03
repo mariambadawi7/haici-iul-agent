@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -231,19 +232,29 @@ static const char AP_HTML[] PROGMEM = R"html(
     h1{color:#0d6efd;margin-bottom:4px}
     p.sub{color:#555;font-size:13px;margin-top:0}
     label{display:block;margin-top:14px;font-size:13px;font-weight:600;color:#333}
-    input{width:100%;padding:9px 10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:14px}
-    button{margin-top:22px;width:100%;padding:13px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer}
-    button:hover{background:#0b5ed7}
+    input,select{width:100%;padding:9px 10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:14px;background:#fff}
+    .row{display:flex;gap:8px;align-items:flex-end}
+    .row select{flex:1}
+    .btn{margin-top:22px;width:100%;padding:13px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer}
+    .btn:hover{background:#0b5ed7}
+    .mini{margin-top:0;width:auto;padding:9px 14px;background:#6c757d;font-size:13px;white-space:nowrap}
+    .mini:hover{background:#5c636a}
     footer{margin-top:28px;text-align:center;font-size:11px;color:#aaa}
     a{color:#0d6efd;text-decoration:none}
+    small{color:#888;font-size:11px}
   </style>
 </head>
 <body>
   <h1>HAICI Configuration</h1>
-  <p class="sub">Connect the ESP32 to your network and WebSocket server.</p>
+  <p class="sub">Pick your WiFi network and set the WebSocket server.</p>
   <form method="POST" action="/save">
-    <label>WiFi SSID</label>
-    <input name="ssid" value="%SSID%" required placeholder="YourWiFi">
+    <label>WiFi Network</label>
+    <div class="row">
+      <select name="ssid" id="ssidSel"><option value="">scanning…</option></select>
+      <button type="button" class="btn mini" id="rescan">Rescan</button>
+    </div>
+    <label>…or type SSID manually (hidden networks)</label>
+    <input name="ssid_manual" id="ssidManual" placeholder="leave blank to use the dropdown above">
     <label>WiFi Password</label>
     <input name="pass" type="password" placeholder="leave blank to keep current">
     <label>WebSocket Host (IP or hostname of the Docker machine)</label>
@@ -256,9 +267,32 @@ static const char AP_HTML[] PROGMEM = R"html(
     <input name="presence" type="number" value="%PRESENCE%" min="10" max="400">
     <label>Idle Timeout Before Re-greeting (minutes)</label>
     <input name="idletm" type="number" value="%IDLETM%" min="1" max="60">
-    <button type="submit">Save &amp; Restart</button>
+    <button type="submit" class="btn">Save &amp; Restart</button>
   </form>
+  <small>🔒 = password-protected network. RSSI in dBm (closer to 0 = stronger).</small>
   <footer>Powered by <a href="https://barmajino.com" target="_blank">barmajino.com</a></footer>
+  <script>
+    const CUR = "%SSID%";
+    const sel = document.getElementById('ssidSel');
+    async function scan(){
+      sel.innerHTML = '<option value="">scanning…</option>';
+      try{
+        const list = await (await fetch('/scan')).json();
+        list.sort((a,b)=>b.rssi-a.rssi);
+        sel.innerHTML = '';
+        if(!list.length){ sel.innerHTML = '<option value="">(none found — use manual)</option>'; return; }
+        for(const n of list){
+          const o = document.createElement('option');
+          o.value = n.ssid;
+          o.textContent = (n.lock?'🔒 ':'   ') + n.ssid + '  (' + n.rssi + ' dBm)';
+          if(n.ssid === CUR) o.selected = true;
+          sel.appendChild(o);
+        }
+      }catch(e){ sel.innerHTML = '<option value="">(scan failed — use manual)</option>'; }
+    }
+    document.getElementById('rescan').onclick = scan;
+    scan();
+  </script>
 </body>
 </html>
 )html";
@@ -274,8 +308,29 @@ static void handleAPRoot() {
   apServer.send(200, "text/html", html);
 }
 
+// Returns scanned networks as JSON: [{"ssid":"..","rssi":-50,"lock":true}, ...]
+static void handleScan() {
+  int n = WiFi.scanNetworks(false /*sync*/, false /*hidden*/);
+  String json = "[";
+  for (int i = 0; i < n; i++) {
+    if (i) json += ',';
+    // Escape backslash and double-quote in SSID so the JSON stays valid
+    String s = WiFi.SSID(i);
+    s.replace("\\", "\\\\");
+    s.replace("\"", "\\\"");
+    json += "{\"ssid\":\"" + s + "\",\"rssi\":" + String(WiFi.RSSI(i)) +
+            ",\"lock\":" +
+            (WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "false" : "true") + "}";
+  }
+  json += "]";
+  WiFi.scanDelete();
+  apServer.send(200, "application/json", json);
+}
+
 static void handleAPSave() {
-  String ssid  = apServer.arg("ssid");
+  // Manual entry (hidden networks) overrides the dropdown selection.
+  String ssid  = apServer.arg("ssid_manual");
+  if (ssid.isEmpty()) ssid = apServer.arg("ssid");
   String pass  = apServer.arg("pass");
   if (pass.isEmpty()) pass = cfg.wifiPass;   // keep existing password if blank
 
@@ -309,7 +364,9 @@ static void startAPMode() {
   ws.disconnect();
   WiFi.disconnect(true);
   delay(100);
-  WiFi.mode(WIFI_AP);
+  // AP_STA mode: serve the config hotspot AND keep station radio available so
+  // WiFi.scanNetworks() works without dropping the phone connected to the AP.
+  WiFi.mode(WIFI_AP_STA);
   WiFi.softAP("HAICI-Config", "haici1234");
 
   appState    = AppState::AP_CONFIG;
@@ -321,6 +378,7 @@ static void startAPMode() {
   Serial.println("[AP] Open http://192.168.4.1 in a browser to configure");
 
   apServer.on("/",     HTTP_GET,  handleAPRoot);
+  apServer.on("/scan", HTTP_GET,  handleScan);
   apServer.on("/save", HTTP_POST, handleAPSave);
   apServer.begin();
 }
@@ -401,6 +459,115 @@ static void handleButtons() {
   }
 }
 
+// ── Captive-portal handling ────────────────────────────────────────────────
+//
+// Many public WiFis (campus, cafe, hotel) need a human to open a browser and
+// click "Sign in / Accept". A headless ESP32 can't do credential logins, but:
+//   1. We DETECT the portal with a generate_204 probe.
+//   2. We make a BEST-EFFORT attempt to auto-accept simple click-through
+//      "I accept the terms" portals (no value for credential/SMS portals).
+//   3. KEY POINT: the HAICI relay is on the LAN, and captive portals gate
+//      *internet* traffic, not LAN-to-LAN — so the WebSocket usually connects
+//      regardless of whether the portal is signed in.
+//
+static bool captiveDetected = false;
+static bool internetOk      = false;
+
+// 0 = open internet (got 204), 1 = captive portal, 2 = no connectivity
+static int probeConnectivity(String& portalUrl) {
+  HTTPClient http;
+  http.setConnectTimeout(4000);
+  http.setTimeout(4000);
+  http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);  // capture the portal URL
+  if (!http.begin("http://connectivitycheck.gstatic.com/generate_204")) return 2;
+  const char* hdrKeys[] = { "Location" };
+  http.collectHeaders(hdrKeys, 1);
+  int code = http.GET();
+  int result;
+  if (code == 204) {
+    result = 0;                                  // clean internet
+  } else if (code > 0) {
+    portalUrl = http.header("Location");         // empty if it was a 200 body
+    result = 1;                                  // intercepted -> captive portal
+  } else {
+    result = 2;                                  // couldn't reach anything
+  }
+  http.end();
+  return result;
+}
+
+// Best-effort: fetch the portal page, find the first <form action=...> and
+// submit it empty. Works for trivial "click to continue" gateways only.
+static bool tryAutoAcceptPortal(const String& portalUrl) {
+  if (portalUrl.isEmpty()) return false;
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  if (!http.begin(portalUrl)) return false;
+  int code = http.GET();
+  if (code <= 0) { http.end(); return false; }
+  String body = http.getString();
+  http.end();
+
+  int fa = body.indexOf("action=");
+  if (fa < 0) return false;
+  char quote = body.charAt(fa + 7);              // ' or "
+  int start  = fa + 8;
+  int end    = body.indexOf(quote, start);
+  if (end < 0) return false;
+  String action = body.substring(start, end);
+  if (action.isEmpty()) return false;
+
+  // Resolve a relative action against the portal origin
+  if (action.startsWith("/")) {
+    int s = portalUrl.indexOf("://");
+    int h = portalUrl.indexOf('/', s + 3);
+    action = portalUrl.substring(0, h < 0 ? portalUrl.length() : h) + action;
+  }
+
+  HTTPClient post;
+  post.setConnectTimeout(5000);
+  post.setTimeout(5000);
+  post.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  if (!post.begin(action)) return false;
+  post.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  int pc = post.POST("accept=1&submit=Continue");
+  post.end();
+  Serial.printf("[NET] Auto-accept POST to %s -> %d\n", action.c_str(), pc);
+  return pc > 0 && pc < 400;
+}
+
+// Runs once after WiFi connects. Diagnostic only — never blocks the WS attempt.
+static void runConnectivityCheck() {
+  String portalUrl;
+  int conn = probeConnectivity(portalUrl);
+  if (conn == 0) {
+    internetOk = true; captiveDetected = false;
+    Serial.println("[NET] Open internet access (no captive portal)");
+    return;
+  }
+  if (conn == 2) {
+    internetOk = false; captiveDetected = false;
+    Serial.println("[NET] No internet response (portal may still allow LAN)");
+    return;
+  }
+  // conn == 1 : captive portal
+  captiveDetected = true; internetOk = false;
+  Serial.printf("[NET] Captive portal detected (sign-in page): %s\n",
+                portalUrl.length() ? portalUrl.c_str() : "(redirect body)");
+  if (tryAutoAcceptPortal(portalUrl)) {
+    String tmp;
+    if (probeConnectivity(tmp) == 0) {
+      internetOk = true; captiveDetected = false;
+      Serial.println("[NET] Auto-accept succeeded — internet now open");
+      return;
+    }
+  }
+  Serial.println("[NET] Portal needs manual sign-in for INTERNET, but the");
+  Serial.println("[NET] HAICI relay is on the LAN and should still be reachable.");
+}
+
 // =============================================================================
 //  SETUP
 // =============================================================================
@@ -473,6 +640,11 @@ void loop() {
     wsPending = true;
     appState  = AppState::CONNECTING_WS;
     setLed(false, true, false);   // Blue
+    Serial.printf("[WiFi] Connected, IP %s\n", WiFi.localIP().toString().c_str());
+
+    // One-time captive-portal / internet diagnostic (does not block the WS).
+    runConnectivityCheck();
+
     ws.begin(cfg.wsHost, cfg.wsPort, cfg.wsPath);
     ws.onEvent(wsEvent);
     ws.setReconnectInterval(WS_RECONNECT_MS);
@@ -482,7 +654,12 @@ void loop() {
 
   ws.loop();   // must be called every iteration when WiFi is up
 
-  if (!wsConnected) return;
+  if (!wsConnected) {
+    // While waiting for the relay: solid blue normally, but blink blue if a
+    // captive portal was detected (hint: internet needs manual sign-in).
+    if (captiveDetected) setLed(false, millis() % 600 < 300, false);
+    return;
+  }
 
   // Fully connected
   checkPresence();
