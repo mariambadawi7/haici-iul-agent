@@ -66,27 +66,37 @@ The 1k + 2k divider brings 5V down to ~3.33V — within spec.
 
 ## How the connection and messages work
 
+Both the ESP32 and the browser connect **directly** to the Bun.serve relay on
+port `3001` (the browser does **not** go through the Vite proxy — that proved
+unreliable for WebSocket frames). On the kiosk the page is served over
+`http://localhost:5173`, which is a secure context (so the mic still works) and
+lets the page open a plain `ws://…:3001` connection with no cert/mixed-content
+issues.
+
 ```
-ESP32                      ws-server.ts :3001                 Browser tab
-  │                                │                               │
-  │── WebSocket connect ───────────►  (?client=hardware)          │
-  │   ws://192.168.x.x:3001/ws     │                               │
-  │   ?client=hardware             │◄── WebSocket connect ─────────│
-  │                                │    (/ws?client=browser        │
-  │                                │     proxied by Vite)          │
-  │── {"type":"new_session"} ──────►── relay to all browsers ──────►│
-  │                                │                               │ createSession()
-  │                                │                               │ sendText("Hello!")
-  │                                │◄── {"type":"status",          │
-  │                                │     "state":"thinking"} ──────│
-  │◄── forwarded ──────────────────│                               │
-  │  (for future display/LEDs)     │                               │
-  │                                │                               │
-  │── {"type":"start_record"} ─────►── relay ─────────────────────►│
-  │                                │                               │ stt.start()
-  │── {"type":"stop_record"} ──────►── relay ─────────────────────►│
-  │                                │                               │ stt.stop() → sendAudio()
+ESP32                         ws-server.ts (Bun) :3001            Browser tab
+  │                                    │                               │
+  │── ws://<host>:3001/ws ────────────►│                               │
+  │      ?client=hardware              │◄── ws://<host>:3001/ws ────────│
+  │                                    │       ?client=browser         │
+  │── {"type":"new_session"} ─────────►── relay to all browsers ──────►│
+  │                                    │                               │ createSession()
+  │                                    │                               │ sendText("Hello!")
+  │                                    │◄── {"type":"status",          │
+  │                                    │     "state":"thinking"} ──────│
+  │◄── forwarded ──────────────────────│                               │
+  │  (logged; for future display)      │                               │
+  │                                    │                               │
+  │── {"type":"start_record"} ────────►── relay ─────────────────────►│
+  │                                    │                               │ stt.start()
+  │── {"type":"stop_record"} ─────────►── relay ─────────────────────►│
+  │                                    │                               │ stt.stop() → sendAudio()
 ```
+
+> **Mobile note:** the relay speaks plain `ws` only. The ESP→browser hardware
+> control therefore targets the **kiosk** browser (localhost). Phones opening the
+> UI over `https` (VITE_HTTPS=1) still get full chat/voice via the n8n webhook,
+> but not the ESP relay. Override the relay URL with `VITE_HW_WS_URL` if needed.
 
 ### Message reference
 

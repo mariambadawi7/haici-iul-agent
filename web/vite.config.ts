@@ -1,24 +1,26 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
 const N8N_TARGET = process.env.N8N_TARGET || "http://n8n:5678";
 
+// HTTPS is only needed for microphone access on MOBILE (accessed by LAN IP).
+// On the kiosk machine itself (http://localhost) the browser already treats
+// localhost as a secure context, so the mic works without TLS — and a plain
+// http page can open ws:// to the relay with no mixed-content/cert friction.
+// Set VITE_HTTPS=1 to enable the self-signed cert for mobile testing.
+const USE_HTTPS = process.env.VITE_HTTPS === "1";
+
+const plugins: PluginOption[] = [react()];
+if (USE_HTTPS) plugins.push(basicSsl());
+
 export default defineConfig({
-  plugins: [react(), basicSsl()],
+  plugins,
   server: {
     host: "0.0.0.0",
     port: 5173,
     strictPort: true,
     watch: { usePolling: true },
-    /**
-     * Reverse-proxy n8n webhooks through this dev server so the browser only
-     * ever talks to localhost:5173. Same-origin requests skip the entire CORS
-     * machinery — preflight, allow-origin headers, the lot — which is the
-     * root cause of "Could not reach the workflow" on most n8n setups.
-     *
-     * Inside Docker the n8n container is reachable as `n8n:5678`.
-     */
     proxy: {
       "/webhook": {
         target: N8N_TARGET,
@@ -34,11 +36,6 @@ export default defineConfig({
         target: process.env.WHISPER_TARGET || "http://whisper:8000",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/stt/, ""),
-      },
-      "/ws": {
-        target: "http://localhost:3001",
-        ws: true,
-        changeOrigin: true,
       },
     },
   },
