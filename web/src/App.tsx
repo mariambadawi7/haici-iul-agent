@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import ChatPanel from "./components/ChatPanel";
 import MessageInput from "./components/MessageInput";
 import LandingPage from "./components/LandingPage";
 import HealthBanner from "./components/HealthBanner";
-import Avatar3D from "./components/Avatar3D";
+import Avatar3D, { type Emotion } from "./components/Avatar3D";
 import { useChat } from "./hooks/useChat";
 import { useHardware } from "./hooks/useHardware";
 import { useSTT } from "./hooks/useSTT";
@@ -53,12 +53,109 @@ export default function App() {
     runHealthCheck();
   }, [runHealthCheck]);
 
+  // --- Text-based mouth animation (when TTS is off) ---
+  const [textSpeaking, setTextSpeaking] = useState(false);
+  const [synthAmplitude, setSynthAmplitude] = useState(0);
+  const animFrameRef = useRef<number>(0);
+  const prevPendingRef = useRef(false);
+  const prevMsgCountRef = useRef(0);
+
+  useEffect(() => {
+    const wasPending = prevPendingRef.current;
+    prevPendingRef.current = chat.pending;
+
+    const msgs = chat.active?.messages ?? [];
+    const msgCount = msgs.length;
+    const prevCount = prevMsgCountRef.current;
+    prevMsgCountRef.current = msgCount;
+
+    // Detect: pending just ended OR a new assistant message appeared
+    const newMsg = msgCount > prevCount && msgs[msgs.length - 1]?.role === "assistant";
+    const responseArrived = (wasPending && !chat.pending) || newMsg;
+
+    if (!responseArrived) return;
+    // Skip if TTS audio is already handling the mouth
+    if (tts.speaking) return;
+
+    const lastMsg = [...msgs].reverse().find(m => m.role === "assistant" && m.content);
+    if (!lastMsg) return;
+
+    // Duration scales with text length: ~35ms per character, clamped 1.5–10s
+    const duration = Math.min(Math.max(lastMsg.content.length * 35, 1500), 10000);
+    const startTime = performance.now();
+
+    setTextSpeaking(true);
+
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      if (elapsed >= duration) {
+        setTextSpeaking(false);
+        setSynthAmplitude(0);
+        return;
+      }
+
+      // Fade envelope: ramp up quickly, sustain, then fade out
+      const progress = elapsed / duration;
+      const envelope = progress < 0.08
+        ? progress / 0.08                          // quick ramp-up
+        : progress > 0.85
+          ? (1 - progress) / 0.15                   // fade-out
+          : 1;                                      // sustain
+
+      // Natural speech: overlapping sines at different frequencies + randomness
+      const t = elapsed / 1000;
+      const raw =
+        0.30 +
+        0.22 * Math.sin(t * 9.1) +
+        0.18 * Math.sin(t * 14.7) +
+        0.10 * Math.sin(t * 6.3) +
+        0.08 * Math.sin(t * 21.0) +   // high-freq flicker
+        0.12 * Math.random();           // organic jitter
+
+      setSynthAmplitude(Math.max(0, Math.min(1, raw * envelope)));
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [chat.pending, chat.active?.messages, tts.speaking]);
+
+  // Stop text-speaking if real TTS audio starts
+  useEffect(() => {
+    if (tts.speaking && textSpeaking) {
+      setTextSpeaking(false);
+      setSynthAmplitude(0);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    }
+  }, [tts.speaking, textSpeaking]);
+
   const faceState: FaceState = useMemo(() => {
     if (tts.speaking) return "speaking";
+    if (textSpeaking) return "speaking";
     if (chat.pending) return "thinking";
     if (stt.status === "recording") return "listening";
     return "idle";
-  }, [tts.speaking, chat.pending, stt.status]);
+  }, [tts.speaking, textSpeaking, chat.pending, stt.status]);
+
+  // Effective amplitude: real TTS audio wins over synthetic
+  const effectiveAmplitude = tts.speaking ? tts.amplitude : synthAmplitude;
+
+  // Lightweight sentiment of the latest answer → drives the avatar's expression.
+  const emotion: Emotion = useMemo(() => {
+    const msgs = chat.active?.messages ?? [];
+    const last = [...msgs].reverse().find((m) => m.role === "assistant" && m.content);
+    const t = (last?.content ?? "").toLowerCase();
+    if (!t) return "neutral";
+    if (/(sorry|unfortunately|can(?:no|')t|could ?n[o']t|couldn't|not find|no information|unable|apolog|regret|عذر|آسف|لا يمكن|لم أجد)/.test(t))
+      return "sad";
+    if (/(welcome|glad|happy|great|congrat|wonderful|excellent|delighted|pleasure|thank|أهلا|مرحبا|سعيد|رائع|شكرا)/.test(t))
+      return "happy";
+    if (/(wow|amazing|incredible|fascinating)/.test(t)) return "surprised";
+    return "neutral";
+  }, [chat.active?.messages]);
 
   useHardware({
     faceState,
@@ -149,11 +246,11 @@ export default function App() {
         <main className="flex-1 flex flex-col lg:flex-row-reverse min-w-0 main-panel overflow-hidden border border-slate-200 shadow-sm rounded-2xl bg-white">
           
           {/* RIGHT: Robot Command Center */}
-          <div className="relative shrink-0 lg:w-80 flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 transition-all">
+          <div className="relative shrink-0 lg:w-[22rem] flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 transition-all">
              
              {/* The Robot - Large on desktop, short on mobile */}
-             <div className="h-40 lg:h-64 w-full flex items-center justify-center">
-                <Avatar3D state={faceState} amplitude={tts.amplitude} />
+             <div className="h-52 lg:h-80 w-full flex items-center justify-center">
+                <Avatar3D state={faceState} amplitude={effectiveAmplitude} emotion={emotion} />
              </div>
              
              {/* Beautiful Status Card */}
