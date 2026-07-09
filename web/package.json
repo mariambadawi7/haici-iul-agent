@@ -9,13 +9,17 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@react-three/drei": "^9.99.0",
+    "@react-three/fiber": "^8.15.19",
     "framer-motion": "^11.11.17",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "three": "^0.160.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
+    "@types/three": "^0.160.0",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-basic-ssl": "^1.1.0",
     "@vitejs/plugin-react": "^4.3.3",

@@ -4,7 +4,7 @@ import ChatPanel from "./components/ChatPanel";
 import MessageInput from "./components/MessageInput";
 import LandingPage from "./components/LandingPage";
 import HealthBanner from "./components/HealthBanner";
-import AnimatedFace from "./components/AnimatedFace";
+import Avatar3D from "./components/Avatar3D";
 import { useChat } from "./hooks/useChat";
 import { useHardware } from "./hooks/useHardware";
 import { useSTT } from "./hooks/useSTT";
@@ -153,7 +153,7 @@ export default function App() {
              
              {/* The Robot - Large on desktop, short on mobile */}
              <div className="h-40 lg:h-64 w-full flex items-center justify-center">
-                <AnimatedFace state={faceState} amplitude={tts.amplitude} />
+                <Avatar3D state={faceState} amplitude={tts.amplitude} />
              </div>
              
              {/* Beautiful Status Card */}
