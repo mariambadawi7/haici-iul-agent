@@ -32,11 +32,6 @@ export default defineConfig({
         changeOrigin: true,
         timeout: 120_000,
       },
-      "/stt": {
-        target: process.env.WHISPER_TARGET || "http://whisper:8000",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/stt/, ""),
-      },
     },
   },
 });

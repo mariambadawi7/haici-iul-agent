@@ -9,8 +9,6 @@ services:
       - GENERIC_TIMEZONE=Asia/Beirut
       - TZ=Asia/Beirut
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-      - N8N_RUNNERS_ENABLED=true
-      - OLLAMA_HOST=http://ollama:11434
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
@@ -31,9 +29,6 @@ services:
       - ./shared_docs:/shared_docs
     depends_on:
       - qdrant
-      - ollama
-      - whisper
-      - piper
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -43,52 +38,6 @@ services:
       - "6333:6333"
     volumes:
       - ./qdrant_data:/qdrant/storage
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: always
-    ports:
-      - "11435:11434"
-    volumes:
-      - ./ollama_data:/root/.ollama
-    # Uncomment if you have an Nvidia GPU:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
-  # ── LOCAL SPEECH-TO-TEXT (Whisper) ──────────────────────────────
-  # OpenAI-compatible API: POST /v1/audio/transcriptions
-  # From n8n: http://whisper:8000
-  whisper:
-    image: fedirz/faster-whisper-server:latest-cpu
-    container_name: whisper
-    restart: always
-    ports:
-      - "8000:8000"
-    environment:
-      - WHISPER__MODEL=base
-      - WHISPER__INFERENCE_DEVICE=cpu
-    volumes:
-      - ./whisper_data:/root/.cache/huggingface
-
-  # ── LOCAL TEXT-TO-SPEECH (Piper) ───────────────────────────────
-  # Simple HTTP API: POST http://piper:5000  (raw text body → WAV audio)
-  # English voice. Change MODEL_DOWNLOAD_LINK for other languages.
-  piper:
-    image: artibex/piper-http:latest
-    container_name: piper
-    restart: always
-    ports:
-      - "5500:5000"
-    environment:
-      - MODEL_DOWNLOAD_LINK=https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx?download=true
-    volumes:
-      - ./piper_data:/app/models
 
   # ── WEB UI (Vite + React + TS + Tailwind, run with Bun) ─────────
   # Dev server with HMR. Source mounted from ./web; node_modules kept

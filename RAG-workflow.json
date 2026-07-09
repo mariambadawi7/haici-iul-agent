@@ -55,20 +55,20 @@
     },
     {
       "parameters": {
-        "model": "nomic-embed-text:latest"
+        "modelName": "models/gemini-embedding-001"
       },
       "id": "715b5144-e627-44bb-8bda-1bd40ea6dc10",
-      "name": "Ollama Embeddings",
-      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "name": "Embeddings Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
         608,
         224
       ],
       "credentials": {
-        "ollamaApi": {
-          "id": "ybeAuY8rLUwFESFs",
-          "name": "Ollama account"
+        "googlePalmApi": {
+          "id": "8CCAGWb187BYrp2c",
+          "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
@@ -144,17 +144,6 @@
         ]
       ]
     },
-    "Ollama Embeddings": {
-      "ai_embedding": [
-        [
-          {
-            "node": "Qdrant Vector Store",
-            "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Default Data Loader": {
       "ai_document": [
         [
@@ -183,6 +172,17 @@
           {
             "node": "Read File from Disk",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
             "index": 0
           }
         ]

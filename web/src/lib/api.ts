@@ -214,7 +214,8 @@ export async function sendChatAudio(
 }
 
 /**
- * Directly transcribe the audio using the local Whisper instance.
+ * Transcribe the audio via the n8n STT webhook (Gemini under the hood).
+ * The browser only ever talks to n8n — the Gemini key stays server-side.
  */
 export async function transcribeAudio(
   blob: Blob,
@@ -223,9 +224,8 @@ export async function transcribeAudio(
   const form = new FormData();
   const ext = blob.type.includes("webm") ? "webm" : "wav";
   form.append("file", blob, `speech.${ext}`);
-  form.append("model", "base");
 
-  const res = await fetchWithTimeout("/stt/v1/audio/transcriptions", {
+  const res = await fetchWithTimeout("/webhook/stt", {
     method: "POST",
     body: form,
     signal,

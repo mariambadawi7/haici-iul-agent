@@ -88,7 +88,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Whatever key n8n stored the upload under (data, data0, file, …),\n// make sure it's reachable as `data0` so downstream nodes don't care.\nconst items = $input.all();\nfor (const item of items) {\n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0 && !item.binary.data0) {\n      item.binary.data0 = item.binary[keys[0]];\n    }\n  }\n}\nreturn items;"
+        "jsCode": "// Ensure the upload is reachable as data0, and expose it as base64\n// (+ mime) so the Gemini STT HTTP node can inline it as JSON.\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0 && !item.binary.data0) {\n      item.binary.data0 = item.binary[keys[0]];\n    }\n    if (item.binary.data0) {\n      const buf = await this.helpers.getBinaryDataBuffer(i, 'data0');\n      item.json.audioB64 = buf.toString('base64');\n      item.json.audioMime = item.binary.data0.mimeType || 'audio/webm';\n    }\n  }\n}\nreturn items;"
       },
       "id": "5d0ea095-20e7-48c2-8303-19db5965d53d",
       "name": "Normalize Binary",
@@ -102,48 +102,32 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://whisper:8000/v1/audio/transcriptions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer not-needed"
-            }
-          ]
-        },
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "parameterType": "formBinaryData",
-              "name": "file",
-              "inputDataFieldName": "data0"
-            },
-            {
-              "name": "model",
-              "value": "base"
-            },
-            {
-              "name": "response_format",
-              "value": "json"
-            }
-          ]
-        },
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: \"Transcribe this audio verbatim. Return only the transcript text, with no extra commentary.\" }, { inline_data: { mime_type: $json.audioMime, data: $json.audioB64 } } ] } ] }) }}",
         "options": {
           "timeout": 60000
         }
       },
       "id": "c3ca10ce-7b64-4d62-87c7-e7e15b4e5ff8",
-      "name": "Local Whisper (STT)",
+      "name": "Gemini STT",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         1536,
         2768
       ],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8CCAGWb187BYrp2c",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     },
     {
       "parameters": {
@@ -152,7 +136,7 @@
             {
               "id": "set-ut-a",
               "name": "userText",
-              "value": "={{ $json.text }}",
+              "value": "={{ $json.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '' }}",
               "type": "string"
             }
           ]
@@ -196,7 +180,7 @@
         "promptType": "define",
         "text": "=user message :\n{{ $json.userText }}",
         "options": {
-          "systemMessage": "You are a friendly customer-support assistant for the Islamic University of Lebanon (IUL).\n\nTOOL USAGE RULES:\n- For any factual question about IUL — its faculties, campuses, history, founding vision, accreditation, programs, admissions, languages of instruction, student life, specific people or dates — you MUST call the Search_Local_Documents tool first with the user's question as the search query. NEVER pass an empty query. If the tool returns nothing useful, say you could not find that information rather than guessing.\n- For greetings, small talk, thanks, goodbyes, or clarification requests about your previous answer, reply directly without calling the tool.\n- When you introduce yourself, say you are the IUL Agent and you can answer questions about the Islamic University of Lebanon.\n\nVOICE FORMAT RULES:\n- No markdown, no asterisks, no hashtags, no bullet points, no emojis.\n- Use natural spoken transitions like First, Next, and Finally.\n- Keep sentences short and conversational.\n- Two to four short sentences is usually enough."
+          "systemMessage": "You are a friendly customer-support assistant for the Islamic University of Lebanon (IUL).\n\nLANGUAGE RULES:\n- Detect the language of the user's latest message and always write your final answer in that same language. If they write in Arabic, answer in clear, natural Modern Standard Arabic; if in English, answer in English.\n- You may search the knowledge base in English even when the user asked in Arabic, but the answer you return must be in the user's language.\n\nTOOL USAGE RULES:\n- For any factual question about IUL — its faculties, campuses, history, founding vision, accreditation, programs, admissions, languages of instruction, student life, specific people or dates — you MUST call the Search_Local_Documents tool first with the user's question as the search query. NEVER pass an empty query. If the tool returns nothing useful, say you could not find that information rather than guessing.\n- For greetings, small talk, thanks, goodbyes, or clarification requests about your previous answer, reply directly without calling the tool.\n- When you introduce yourself, say you are the IUL Agent and you can answer questions about the Islamic University of Lebanon.\n\nVOICE FORMAT RULES:\n- No markdown, no asterisks, no hashtags, no bullet points, no emojis.\n- Use natural spoken transitions like First, Next, and Finally.\n- Keep sentences short and conversational.\n- Two to four short sentences is usually enough."
         }
       },
       "id": "956140dc-2e07-492b-9f5b-4eaad875399d",
@@ -250,25 +234,6 @@
     },
     {
       "parameters": {
-        "model": "nomic-embed-text:latest"
-      },
-      "id": "ff169754-8bab-4ca9-a182-ce57ffe9fc59",
-      "name": "Ollama Embeddings",
-      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
-      "typeVersion": 1,
-      "position": [
-        2192,
-        3568
-      ],
-      "credentials": {
-        "ollamaApi": {
-          "id": "ybeAuY8rLUwFESFs",
-          "name": "Ollama account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "name": "Search_Local_Documents",
         "description": "Search the IUL knowledge base for factual information about the Islamic University of Lebanon — faculties, campuses, history, accreditation, programs, admissions, languages of instruction. The input should be the user's question or a few keywords from it. Never pass an empty string."
       },
@@ -283,7 +248,8 @@
     },
     {
       "parameters": {
-        "options": {}
+        "options": {},
+        "modelName": "models/gemini-3-flash-preview"
       },
       "id": "f051ce9f-69a7-49db-beee-c9336a1fa301",
       "name": "Gemini (Tool LLM)",
@@ -302,7 +268,8 @@
     },
     {
       "parameters": {
-        "options": {}
+        "options": {},
+        "modelName": "models/gemini-3.1-pro-preview"
       },
       "id": "952b40f0-bcd8-44d9-8992-a9d44fd32890",
       "name": "Gemini (Agent LLM)",
@@ -391,41 +358,36 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://piper:5000",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "text/plain"
-            }
-          ]
-        },
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
-        "contentType": "raw",
-        "body": "={{ $json.answer }}",
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: $json.answer } ] } ], generationConfig: { responseModalities: [\"AUDIO\"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: \"Kore\" } } } } }) }}",
         "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file"
-            }
-          },
           "timeout": 60000
         }
       },
       "id": "8e5fdf30-953b-46e8-bd56-e1a5750ff438",
-      "name": "Local Piper (TTS)",
+      "name": "Gemini TTS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         2768,
         2768
       ],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8CCAGWb187BYrp2c",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const answer = $('Keep Answer Text').first().json.answer;\nconst question = $('Keep Answer Text').first().json.question;\n\nconst binaryData = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst audioBase64 = binaryData.toString('base64');\n\nreturn [{\n  json: {\n    answer,\n    question: question || '',\n    audioMime: 'audio/wav',\n    audioBase64\n  }\n}];"
+        "jsCode": "const answer = $('Keep Answer Text').first().json.answer;\nconst question = $('Keep Answer Text').first().json.question;\n\n// Gemini TTS returns base64 PCM (signed 16-bit LE, mono) in inlineData.\nconst part = $json.candidates?.[0]?.content?.parts?.[0];\nconst pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\nif (!pcmB64) {\n  return [{ json: { answer, question: question || '', audioMime: '', audioBase64: '' } }];\n}\nconst mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\nconst m = mime.match(/rate=(\\d+)/);\nconst sampleRate = m ? parseInt(m[1], 10) : 24000;\nconst channels = 1, bitsPerSample = 16;\nconst pcm = Buffer.from(pcmB64, 'base64');\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + pcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(pcm.length, 40);\nconst wav = Buffer.concat([h, pcm]);\n\nreturn [{ json: { answer, question: question || '', audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];"
       },
       "id": "800c7136-d5f6-4cd7-a971-e3d042b449a0",
       "name": "Build JSON (Text + Audio)",
@@ -533,7 +495,9 @@
       ]
     },
     {
-      "parameters": {},
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
@@ -584,25 +548,7 @@
       "main": [
         [
           {
-            "node": "Local Whisper (STT)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Local Whisper (STT)": {
-      "main": [
-        [
-          {
-            "node": "Set userText (Audio)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond (Error)",
+            "node": "Gemini STT",
             "type": "main",
             "index": 0
           }
@@ -671,17 +617,6 @@
         ]
       ]
     },
-    "Ollama Embeddings": {
-      "ai_embedding": [
-        [
-          {
-            "node": "Qdrant Vector Store",
-            "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Search_Local_Documents": {
       "ai_tool": [
         [
@@ -730,25 +665,7 @@
       "main": [
         [
           {
-            "node": "Local Piper (TTS)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond (Text Only)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Local Piper (TTS)": {
-      "main": [
-        [
-          {
-            "node": "Build JSON (Text + Audio)",
+            "node": "Gemini TTS",
             "type": "main",
             "index": 0
           }
@@ -775,7 +692,49 @@
     },
     "Embeddings Google Gemini": {
       "ai_embedding": [
-        []
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini STT": {
+      "main": [
+        [
+          {
+            "node": "Set userText (Audio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini TTS": {
+      "main": [
+        [
+          {
+            "node": "Build JSON (Text + Audio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Text Only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
