@@ -1,11 +1,12 @@
 {
+  "name": "RAG workflow",
   "nodes": [
     {
       "parameters": {
         "fileSelector": "={{ $json.path }}",
         "options": {}
       },
-      "id": "f928d4b5-1389-40d7-89d6-26805dcedf3a",
+      "id": "7cadf2d4-2a5b-4aae-a83b-0895a1452702",
       "name": "Read File from Disk",
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
@@ -19,7 +20,7 @@
         "operation": "text",
         "options": {}
       },
-      "id": "d930e2e7-e7c0-4fca-a605-a81f894b6d99",
+      "id": "b1ee5eee-118b-488b-b6cc-16d6c5d9127e",
       "name": "Extract from File",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -38,7 +39,7 @@
         },
         "options": {}
       },
-      "id": "1a322575-39f0-4702-afe7-9d4e87b39a4a",
+      "id": "9bbab88e-443b-42d1-ada1-8f2502227c10",
       "name": "Qdrant Vector Store",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
@@ -48,16 +49,14 @@
       ],
       "credentials": {
         "qdrantApi": {
-          "id": "utp8208FXQyS33EP",
+          "id": "s8y82MhojZO6aenN",
           "name": "Qdrant account"
         }
       }
     },
     {
-      "parameters": {
-        "modelName": "models/gemini-embedding-001"
-      },
-      "id": "715b5144-e627-44bb-8bda-1bd40ea6dc10",
+      "parameters": {},
+      "id": "0cf1b47f-3521-4a8c-b6b7-aabf32241a61",
       "name": "Embeddings Google Gemini",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
@@ -67,7 +66,7 @@
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "8CCAGWb187BYrp2c",
+          "id": "3NeEadTXR21DloX6",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -76,7 +75,7 @@
       "parameters": {
         "options": {}
       },
-      "id": "3e643b0c-c048-4ca9-87b8-7f8b9dcd3b35",
+      "id": "18798c38-c740-4f01-9f46-fe890eda43b7",
       "name": "Default Data Loader",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1,
@@ -91,7 +90,7 @@
         "chunkOverlap": 50,
         "options": {}
       },
-      "id": "83fba7f6-4feb-4902-8964-965078d45633",
+      "id": "957ac4ad-f18e-4a80-9aad-cb954ed71c3c",
       "name": "Recursive Character Text Splitter",
       "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
       "typeVersion": 1,
@@ -111,7 +110,7 @@
           "usePolling": true
         }
       },
-      "id": "fcb547c5-2953-4e8f-a595-c6295efb81b7",
+      "id": "d0526201-38f2-4851-82d4-ad49b97e1955",
       "name": "Local File Trigger",
       "type": "n8n-nodes-base.localFileTrigger",
       "typeVersion": 1,
@@ -121,6 +120,7 @@
       ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Read File from Disk": {
       "main": [
@@ -189,8 +189,16 @@
       ]
     }
   },
-  "pinData": {},
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c3d85b21-22fa-4ac5-a707-e05aef2b04d7",
   "meta": {
-    "instanceId": "8bdbf1bc91037a165582246937af5b6fa5fdc2fc8711ad6e0194ee5b94944d65"
-  }
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e45265a3a5a0e6b9ecd4cd587767717341e4aa817eccf8b5edf21577ef6b9a1b"
+  },
+  "id": "btAR6oU4MThHIYy9",
+  "tags": []
 }

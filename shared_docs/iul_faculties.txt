@@ -1,0 +1,153 @@
+# IUL Faculties and Academic Programs
+
+IUL offers Undergraduate (Bachelor's/License), Graduate (Master's), and Postgraduate (PhD) programs.
+
+## Faculty of Engineering
+Located primarily at the Wardanieh campus. IUL was the first university in Lebanon to offer specialized degrees in Biomedical Engineering and Surveying Engineering.
+
+Bachelor's programs (5-year Engineering Diploma):
+- Computer and Communications Engineering
+- Surveying Engineering
+- Biomedical Engineering Technologies
+- Civil Engineering
+
+Master's programs:
+- Master's in Biomedical Engineering Technologies
+- Master's in Computer Science and Communications
+
+## Faculty of Law
+A highly regarded faculty established by Decree No. 1948 dated 21/12/1999.
+
+Bachelor's programs (License - 3 years, under Lebanese University supervision):
+- Law (general)
+
+Diploma of Higher Studies:
+- Private Law
+- Business Law
+- Public Law
+
+Master's programs:
+- Private Law
+- Business Law
+- Public Law
+- Arbitration (pending)
+- Administrative Law (pending)
+
+PhD programs:
+- PhD in Law
+
+## Faculty of Economics and Business Administration
+(Formerly the Higher Institute of Administration, renamed by Decree 673 dated 28/08/2007)
+
+Bachelor's programs (License - 3 years):
+- Business Management
+- Marketing
+- Accounting
+- Management Information Systems
+- Banking and Finance
+- Industrial Management
+- Economics
+
+Master's programs:
+- Accounting Audit
+- Financial Management
+- Educational Administration
+- Hospital Management
+- Business Administration (MBA)
+- Information Systems Management
+- Economic Sciences (pending teaching authorization)
+
+## Faculty of Sciences and Arts
+(Formerly the University Institute of Applied Technology, renamed by Decree 673 dated 28/08/2007)
+
+Bachelor's programs (License - 3 years):
+- Graphic Design
+- Computer Science
+- Biology
+- Interior Design
+- Mathematics
+- Chemistry
+- Biochemistry (not yet activated)
+
+## Faculty of Letters and Human Sciences
+(Formerly the Higher Institute of Languages and Translation)
+
+Bachelor's programs (License):
+- Psychology
+- Languages (Arabic, French, English literature)
+- Geography
+- History
+- Philosophy
+- Translation
+
+Diploma programs:
+- Arabic Language and Literature
+- French Language
+- English Language
+- Geography, History, Philosophy
+
+Master's programs:
+- Arabic Language and Literature
+- French Language and Literature
+- English Language and Literature
+- Geography
+- History
+- Philosophy
+- Psychology
+- Translation
+
+PhD programs:
+- PhD in Arabic Language and Literature
+
+## Faculty of Public Health
+(Formerly Faculty of Nursing Sciences, then Faculty of Nursing and Health Sciences, renamed to Faculty of Public Health by Decree 8849 dated 25/02/2022)
+
+Bachelor's programs:
+- Nursing Sciences (3 years)
+- Speech Therapy / Speech Correction (4 years)
+- Physical Therapy (4 years)
+- Laboratory Sciences (3 years)
+- Nutrition and Dietetics (3 years - not yet activated)
+- Midwifery (4 years - not yet activated)
+
+## Faculty of Tourism Sciences
+Bachelor's programs (License):
+- Hotel Management
+- Tourism Sciences (Tourism and Tour Guiding, Health Tourism - not yet activated)
+- Travel and Airline Services
+
+Master's programs:
+- Master's in Tourism Guidance and Travel
+- Master's in Hotel Management
+
+## Faculty of Islamic Studies
+Bachelor's programs (License):
+- Islamic Sciences
+- Sharia (Islamic Law)
+
+Master's programs:
+- Islamic Sciences
+
+PhD programs:
+- PhD in Islamic Sciences
+
+## Faculty of Political, Administrative and Diplomatic Sciences
+Established by Decree No. 1948 dated 21/12/1999.
+
+Bachelor's programs (License):
+- Political Science
+- International Relations and Diplomacy
+- Administrative Sciences (not yet activated)
+
+Diploma of Higher Studies:
+- Political Sciences
+- International Relations and Diplomacy
+- Administrative Sciences
+
+Master's programs:
+- Political Science
+- International Relations and Diplomacy
+
+PhD programs:
+- PhD in Political Science
+- PhD in International Relations and Diplomacy

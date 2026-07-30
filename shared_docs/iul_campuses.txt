@@ -1,0 +1,34 @@
+# IUL Campuses and Locations
+
+## Khaldeh Campus (Main Campus)
+Located on the Old Saida Road (General Highway), south of Beirut. This is the university headquarters, housing the main administration, the central library, and a wide array of faculties. Highly accessible for students commuting from Beirut and surrounding areas. Features a grand cafeteria and dedicated faculty buildings and a student lounge.
+
+## Wardanieh Campus
+A modern, newly built campus located in the Chouf District. Serves as the primary hub for the Faculty of Engineering and advanced technological studies. Also houses the Faculty of Economics and Business Administration and the Faculty of Sciences and Arts. Features modern engineering labs and the HAICI research center. Houses the main IT Helpdesk.
+
+## Tyre (Sour) Campus
+Established in the 2007-2008 academic year. Located in South Lebanon, alleviating the need for students to commute to Beirut. Provides state-of-the-art classrooms and local administrative support. One of the largest campuses by student population with 3,380 students.
+
+## Baalbek Campus
+Opened in 2014 by Decree No. 483 dated 04/09/2014. Brings higher education to the Bekaa Valley and the Baalbek-Hermel region. Focuses on applied research, technology, and regional societal needs. Has 1,665 students.
+
+## Majdal Balhiss (Sahmar) Campus
+License pending. Had 49 students in 2024-2025. No students enrolled in 2025-2026.
+Programs offered: Interior Design, Graphic Design, Computer Science, Computer and Communications Engineering, Civil Engineering, Business Administration, Psychology.
+
+## South Metn Coast (Bourj El Barajneh) Campus
+License pending. Has 654 students.
+Programs offered: Business Administration (all tracks), Interior Design, Graphic Design, Computer Science, Biology, Law.
+
+## Programs by Campus
+
+### Wardanieh Campus
+- Faculty of Economics and Business Administration (all tracks)
+- Faculty of Sciences and Arts (all specializations)
+- Faculty of Engineering (all specializations)
+
+### Baalbek Campus
+Programs offered: Business Administration (all tracks), Computer Science, Graphic Design, Interior Design, Nursing Sciences, Translation, Hotel Management, Tourism and Travel Guidance.
+
+### Tyre (Sour) Campus
+Programs offered: Business Administration, Translation, Graphic Design, Interior Design.

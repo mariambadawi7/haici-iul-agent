@@ -1,18 +1,49 @@
-The Humanity-AI Driven Center for Innovation (HAICI) is a premier research and development hub affiliated with the Islamic University of Lebanon (IUL). 
+# HAICI — Humanity-AI Driven Center for Innovation
 
-### Mission and Focus
-HAICI is dedicated to bridging advanced artificial intelligence technologies with human-centric solutions. The center focuses on AI ethics, digital transformation, and empowering youth in the digital sphere. 
+## Overview
+The Humanity-AI Driven Center for Innovation (HAICI) is a premier research and development hub affiliated with the Islamic University of Lebanon (IUL). It is located at the Wardanieh campus.
 
-### Leadership and Structure
-The center operates under the expert leadership of **Dr. Rodayna Hmede**, who serves as the Head of HAICI. 
+## Mission and Focus
+HAICI is dedicated to bridging advanced artificial intelligence technologies with human-centric solutions. The center focuses on:
+- AI ethics
+- Digital transformation
+- Empowering youth in the digital sphere
+- Developing innovative AI-driven solutions for real-world problems
 
-To effectively manage its diverse projects and technological goals, the center is divided into several specialized student and faculty-led teams:
-* **IT & Technical Team:** Responsible for software development, AI model integration, and maintaining the center's digital infrastructure.
-* **Social Media & Marketing Team:** Dedicated to digital outreach, public relations, and branding strategies. This division is co-led by Mariam Hassan Badawi.
-* **Research & Development Team:** Focuses on exploring new AI trends, developing ethical tech frameworks, and writing academic papers.
-* **Event & Project Management Team:** Organizes workshops, hackathons, and external university representation.
+## Leadership
+The center operates under the expert leadership of Dr. Rodayna Hmede, who serves as the Head of HAICI.
 
-### Key Initiatives and Events
-* **National Youth Strategy (2026-2030):** HAICI actively represents the IUL Faculty of Engineering in governmental consultations regarding the digital sphere and youth empowerment.
-* **Designing Hope in Action Hackathon:** The center participates in and organizes hackathons focused on designing digital solutions for mental health and community wellbeing.
-* **Workshops & Seminars:** HAICI provides ongoing training in advanced AI tools, cybersecurity integration, and modern digital creation.
+## Team Structure
+HAICI is divided into several specialized student and faculty-led teams:
+
+### IT and Technical Team
+Responsible for software development, AI model integration, and maintaining the center's digital infrastructure.
+
+### Social Media and Marketing Team (Digital Marketing and Content Strategy)
+Dedicated to digital outreach, public relations, and branding strategies. This division is co-led by Mariam Hassan Badawi.
+
+### Research and Development Team
+Focuses on exploring new AI trends, developing ethical tech frameworks, and writing academic papers.
+
+### Event and Project Management Team
+Organizes workshops, hackathons, and external university representation.
+
+## Key Initiatives and Events
+
+### National Youth Strategy (2026-2030)
+HAICI actively represents the IUL Faculty of Engineering in governmental consultations regarding the digital sphere and youth empowerment.
+
+### Designing Hope in Action Hackathon
+The center participates in and organizes hackathons focused on designing digital solutions for mental health and community wellbeing.
+
+### Workshops and Seminars
+HAICI provides ongoing training in:
+- Advanced AI tools
+- Cybersecurity integration
+- Modern digital creation
+
+## Current Projects
+HAICI develops AI-driven projects to serve the IUL community, including:
+- The IUL AI Kiosk: A bilingual (Arabic and English) conversational AI assistant for the university campus, capable of answering questions about IUL via voice and text using Retrieval-Augmented Generation (RAG) technology.
+- Digital content strategies for IUL's online presence
+- Research initiatives in AI ethics and humanitarian applications of AI

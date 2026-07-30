@@ -1,0 +1,668 @@
+# HAICI — Humanity-AI Driven Center for Innovation
+
+## Overview
+The Humanity-AI Driven Center for Innovation (HAICI) is a premier research and development hub affiliated with the Islamic University of Lebanon (IUL). It is located at the Wardanieh campus.
+
+## Mission and Focus
+HAICI is dedicated to bridging advanced artificial intelligence technologies with human-centric solutions. The center focuses on:
+- AI ethics
+- Digital transformation
+- Empowering youth in the digital sphere
+- Developing innovative AI-driven solutions for real-world problems
+
+## Leadership
+The center operates under the expert leadership of Dr. Rodayna Hmede, who serves as the Head of HAICI.
+
+## Team Structure
+HAICI is divided into several specialized student and faculty-led teams:
+
+### IT and Technical Team
+Responsible for software development, AI model integration, and maintaining the center's digital infrastructure.
+
+### Social Media and Marketing Team (Digital Marketing and Content Strategy)
+Dedicated to digital outreach, public relations, and branding strategies. This division is co-led by Mariam Hassan Badawi.
+
+### Research and Development Team
+Focuses on exploring new AI trends, developing ethical tech frameworks, and writing academic papers.
+
+### Event and Project Management Team
+Organizes workshops, hackathons, and external university representation.
+
+## Key Initiatives and Events
+
+### National Youth Strategy (2026-2030)
+HAICI actively represents the IUL Faculty of Engineering in governmental consultations regarding the digital sphere and youth empowerment.
+
+### Designing Hope in Action Hackathon
+The center participates in and organizes hackathons focused on designing digital solutions for mental health and community wellbeing.
+
+### Workshops and Seminars
+HAICI provides ongoing training in:
+- Advanced AI tools
+- Cybersecurity integration
+- Modern digital creation
+
+## Current Projects
+HAICI develops AI-driven projects to serve the IUL community, including:
+- The IUL AI Kiosk: A bilingual (Arabic and English) conversational AI assistant for the university campus, capable of answering questions about IUL via voice and text using Retrieval-Augmented Generation (RAG) technology.
+- Digital content strategies for IUL's online presence
+- Research initiatives in AI ethics and humanitarian applications of AI
+# IUL Academic Regulations — Grading, Transfer, and Student Rules
+
+## Grading System (ECTS)
+IUL uses the European ECTS grading system.
+
+Passing grades:
+- General passing grade: 10/20 or 50/100 (ECTS) or 60/100 (American credit system)
+- Engineering and some specialized programs: passing grade is 12/20 or 60/100 (ECTS)
+- Master's level: minimum passing grade for transfer is 55/100 or 11/20 (ECTS), or 70/100 (American system)
+
+Alphabetic grades (ECTS): A, B, C, D (passing); F (fail)
+Note: Faculty of Engineering and Faculty of Public Health do not accept grade D for course transfers.
+
+## Transfer of Credits (Course Transfer Rules)
+
+### General Rules
+- A course whose prerequisite has not been validated cannot be transferred. Both the prerequisite and the dependent course must be transferred together.
+- The transferred course must have the same contact hours and cover at least 75% of the equivalent course content at IUL.
+- Maximum transferable credits: 50% of total program credits (per Ministerial Decree No. 780/3/2013)
+- Exception: Engineering Faculty allows up to 120 ECTS transfer out of 300 ECTS total.
+
+### Transfer Codes on Transcript
+- "T" = transferred course (from external university)
+- "G" = course exemption/dispensation (granted without a grade, does not affect GPA)
+- Internal IUL transfers between faculties: marked with an asterisk, keep their original grade (not "T")
+
+### Engineering Faculty Transfer Requirements
+- Courses must come from accredited Engineering programs
+- Transfer only accepted from institutions recognized by the Order of Engineers
+- Candidates must pass an English Proficiency Test (IUL-EPT) with a minimum score of 60/100
+
+### Courses That Cannot Be Transferred
+- Courses obtained through internships or thesis projects
+- Courses from a student currently on academic probation at the origin university
+- Academic probation means the student received a warning due to insufficient results without being expelled
+
+### Transfer Application Process
+Submit transfer file to the Admissions and Orientation Office (BAO) at least 4 weeks before registration begins, including:
+- Certified copy of transcript
+- Course descriptions and syllabi for each course
+
+### If Student Registers for an Already-Transferred Course
+The transfer "T" is removed from the transcript and replaced by the new grade obtained at IUL.
+
+### Courses Completed at IUL Cannot Be Retransferred
+Courses that a student completed at IUL cannot be taken elsewhere and retransferred back to IUL.
+
+## Re-admission After Academic Interruption
+
+### 3-Year Interruption
+Full re-examination of equivalency file. Courses still in the current curriculum with satisfactory grades will be counted.
+
+### 5-Year Interruption
+Without legitimate force majeure justification, the student permanently loses the right to resume their academic path. No credits are recognized except:
+- Courses with grade A or B (for Humanities, Tourism, Islamic Studies, Law, Economics, Political Sciences)
+- Engineering, Technology, Sciences, and Public Health: recognition after 5 years is NOT automatic; handled on a case-by-case basis
+
+### Master's Level
+Minimum duration: 2 years; Maximum: 4 years. Unjustified interruption does not grant any right to extension.
+
+## Academic Probation
+- Bachelor's students: two semesters on academic probation leads to conditional admission. After the 3rd semester, if the student still doesn't meet the required average, they must change their specialization.
+- Master's students: may only re-register for failed courses once. If they fail again, they must change their specialization.
+- Students on academic probation may register for failed courses plus a maximum of 2-3 additional courses.
+
+## Changing Specialization or Program
+Students can request a change of specialization using form RPRA002FR. A change between two different programs may allow transfer of general education courses and introductory courses. No transfer of credits from Level 2 to Level 1 or vice versa is permitted.
+
+## Course Withdrawal
+Students can withdraw from all courses in a semester using form RPRA016EN. The student will receive grade F if they exceed the absence limit and do not withdraw before the final exam.
+
+## Free Listener (Auditor) Status
+Students can apply to attend courses as a free listener (non-degree seeking) using form RPRA010FR/EN.
+
+## Cross Registration
+Students can register for courses at other universities using form RPRA014EN.
+
+## Changing Campus
+Students can request a campus change using form RPRA021EN (Week 13 deadline).
+
+## Graduation
+
+### Conditions for Graduation
+- Complete all required credits for the program
+- Achieve the required cumulative GPA
+- Complete all general education requirements
+- Pay all financial obligations
+
+### Graduation Suspension
+Students who are not ready to receive their diploma can apply for graduation suspension using form RPRA023EN/FR.
+
+### Diploma Collection
+Students collect their diploma using form RPRA024AR/FR after completing all graduation requirements.
+
+### Duplicate Diploma
+Students who lose their diploma can request a duplicate using form RPRA026AR.
+
+## Master's Thesis Process
+
+### Key Steps
+1. Choose thesis topic and supervisor (form 001)
+2. Appoint supervisor (form 002)
+3. Calendar for supervision and follow-up (form 003)
+4. Pre-defense announcement (form 007)
+5. Thesis defense announcement (form 013)
+6. Defense evaluation (form 014/015)
+7. Thesis submission (form 011)
+
+### Thesis Requirements
+- Must publish 2 original research papers in peer-reviewed indexed journals before the thesis defense
+- Cannot defend thesis without completing all required coursework
+- Plagiarism detection is mandatory (form 019FR)
+
+### Changing Thesis Topic or Supervisor
+- Changing thesis topic: use form 009AR
+- Changing thesis supervisor: use form 022
+
+### Contestation of Results
+Students can contest defense results using form 018FR.
+
+## Code of Ethics
+All students must sign the IUL Code of Ethics (form RPRA022EN) upon admission.
+# IUL Admissions — How to Apply
+
+## Application Deadlines
+- Fall Semester: Deadline is August 30th
+- Spring Semester: Deadline is January 15th
+
+## General Admission Process
+Prospective students must submit a completed application (form ADM001) to the Admissions and Orientation Office, along with required documents within the academic calendar deadlines. The file and its contents remain the property of the university and its confidentiality is guaranteed. Providing false information or forged documents leads to cancellation of the application.
+
+Important: A student is not officially registered until they pay course fees for the relevant semester. The minimum registered credits cannot be less than one course from those specified in the accepted program.
+
+## Documents Required for Bachelor's (Level 1) Admission
+- Certified copy of ID or valid passport (mandatory for foreign students)
+- Two recent passport photos certified by the local mayor/municipality
+- Certified copy of grades from the last three years of secondary school
+- Certified copy of Lebanese Baccalaureate certificate or equivalent, certified by the Ministry of Education and Higher Education
+- Social Security affiliation certificate (new and original)
+- For transfer students: certified transcript, course descriptions, and a withdrawal letter from the previous university
+
+## Documents Required for Master's (Level 2) Admission
+For students coming from outside IUL:
+- ID or valid passport copy
+- Two recent certified passport photos
+- Lebanese Baccalaureate certificate or equivalent, certified by the Ministry of Education
+- Equivalency of university degrees, certified by the Ministry of Education (except Lebanese University degrees)
+- Official transcript of previous academic record
+- Two recommendation letters from academic references who know the student well (sent directly to the Admissions Office in sealed envelopes)
+- Personal letter explaining reasons for choosing IUL
+- CV or e-portfolio
+- Work experience certificates (if applicable)
+- Social Security certificate (new and original)
+
+## General Admission Requirements
+
+### Bachelor's Level (Level 1)
+- Must hold Lebanese Baccalaureate or equivalent recognized by Lebanon:
+  - Lebanese Baccalaureate: Life Sciences (SV), Arts and Humanities (LH), Social and Economic Sciences (SE), Mathematics (SG)
+  - Technical Baccalaureate: acceptance depends on alignment between technical field and university program
+- Must fill online registration form or visit the Admissions and Orientation Office
+- Must demonstrate proficiency in the program's language of instruction (English, French, Arabic, or bilingual)
+- Must pay application file fees and entrance exam fees (non-refundable)
+
+### Master's Level (Level 2)
+- Must hold a Bachelor's degree or equivalent recognized by the Lebanese Ministry of Education
+- Must fulfill specific program admission requirements
+- Must pay application file fees
+
+## Conditional/Preliminary Admission
+If a student holding a Lebanese Baccalaureate submits an incomplete file, they receive conditional acceptance as a temporarily registered student. They must complete missing documents before the end of the first semester. If not completed by end of the semester, the student cannot renew registration and must sign a withdrawal form (RPRA007) until the file is complete, then can apply for re-registration (RPRA008).
+
+## PhD Admission (Level 3)
+
+### Phase 1 – Required Documents
+- Certified copies of all previous university degrees (License and Master's) plus certified transcripts
+- Equivalency of degrees before enrolling in PhD
+- Certified ID copy or family registration extract (Lebanese students) or valid passport (foreign students)
+- Two recent certified passport photos
+- Two recommendation letters from academic faculty members who know the student well (sent directly to the Admissions Office in sealed envelopes)
+- CV mentioning any published research in peer-reviewed indexed journals
+- Note: Students who have published at least two papers in peer-reviewed indexed journals may be exempt from the entrance exam
+
+### Phase 2 – Additional Documents
+- A letter of 400-500 words explaining the main goal of pursuing a PhD in a specific field and the scientific and professional benefit of the intended thesis
+- A proposed thesis topic as a research project
+- A preliminary text of at least 5 pages containing the initial vision for the topic
+
+### Phase 3 – Doctoral Advisory Committee
+The university president, upon the dean's recommendation, appoints a Doctoral Advisory Committee from faculty members at the Associate Professor rank or above. The committee sets a written entrance examination (and oral in some specializations) to evaluate the student's ability to pursue doctoral studies.
+
+### PhD Entrance Exam Evaluates:
+- Language skills
+- General culture level
+- Depth of knowledge in the student's specialization
+- Research methodology knowledge
+- Proficiency in either French or English
+
+### Phase 4 – Post-Acceptance
+The faculty provides the PhD candidate with a range of potential thesis topics that have a qualified supervisor available. The supervisor and thesis topic are finalized in consultation with the Doctoral Advisory Committee. A preliminary semester (Pré-Doc) is given for the student to prepare a research plan of 25-30 pages minimum.
+
+## Doctoral Program Schedule (2026)
+- File submission deadline: 31/1/2026
+- Written entrance exam: 26/2/2026 at the main campus (Khaldeh), 10:00 AM to 1:00 PM
+- Results announced: 10 working days after exam
+- Pre-Doc registration: 18/3/2026
+- Thesis plan defense: last week of June 2026
+- Results: 15/7/2026
+- PhD registration (regular): Fall semester 2026-2027
+
+## PhD Program Structure (Decree 10068)
+Total: 180 European credits (ECTS)
+- 30 credits: methodological, research, scientific, and language coursework
+- 150 credits: thesis (including 2 original research papers)
+- Minimum duration: 3 years; Maximum: 5 years
+- A 6th year requires exceptional approval from the university president
+
+## Credit System (ECTS)
+IUL adopts the European Credit Transfer System (ECTS).
+- 1 credit = 1 hour of instruction per week per semester (15-week semester)
+- 1 credit = 10 contact hours per semester
+- Bachelor's (3 years): 1,800 hours total
+- Bachelor's (4 years): 2,400 hours total
+- Bachelor's (5 years): 3,000 hours total
+- Master's: 700 hours total, 90 credits for courses + thesis credits
+- Academic year = 60 ECTS credits
+- Each semester = 14 teaching weeks + 1 final exam week
+
+## Attendance Policy
+- Lecture courses: minimum 70% attendance required
+- Practical/laboratory courses: minimum 90% attendance required
+- Students exceeding absence limit are not allowed to take final exams
+- Students must withdraw from the course before the final exam or receive an F grade
+
+## Course Workload
+- Full-time Bachelor's students: 24-30 credits per semester
+- Maximum 36-38 credits per semester allowed only for final-semester students with GPA ≥ 75/100 (with Dean's approval)
+- Full-time Master's students: 30 credits per semester maximum
+
+## Academic Calendar
+- Fall Semester: Begins second week of September, ends with finals in late January
+- Spring Semester: Begins second week of February, ends with finals in late June
+- Summer Session: Optional intensive 6-week term from July to mid-August, for students needing 1-16 credits to complete their degree
+# IUL Campuses and Locations
+
+## Khaldeh Campus (Main Campus)
+Located on the Old Saida Road (General Highway), south of Beirut. This is the university headquarters, housing the main administration, the central library, and a wide array of faculties. Highly accessible for students commuting from Beirut and surrounding areas. Features a grand cafeteria and dedicated faculty buildings and a student lounge.
+
+## Wardanieh Campus
+A modern, newly built campus located in the Chouf District. Serves as the primary hub for the Faculty of Engineering and advanced technological studies. Also houses the Faculty of Economics and Business Administration and the Faculty of Sciences and Arts. Features modern engineering labs and the HAICI research center. Houses the main IT Helpdesk.
+
+## Tyre (Sour) Campus
+Established in the 2007-2008 academic year. Located in South Lebanon, alleviating the need for students to commute to Beirut. Provides state-of-the-art classrooms and local administrative support. One of the largest campuses by student population with 3,380 students.
+
+## Baalbek Campus
+Opened in 2014 by Decree No. 483 dated 04/09/2014. Brings higher education to the Bekaa Valley and the Baalbek-Hermel region. Focuses on applied research, technology, and regional societal needs. Has 1,665 students.
+
+## Majdal Balhiss (Sahmar) Campus
+License pending. Had 49 students in 2024-2025. No students enrolled in 2025-2026.
+Programs offered: Interior Design, Graphic Design, Computer Science, Computer and Communications Engineering, Civil Engineering, Business Administration, Psychology.
+
+## South Metn Coast (Bourj El Barajneh) Campus
+License pending. Has 654 students.
+Programs offered: Business Administration (all tracks), Interior Design, Graphic Design, Computer Science, Biology, Law.
+
+## Programs by Campus
+
+### Wardanieh Campus
+- Faculty of Economics and Business Administration (all tracks)
+- Faculty of Sciences and Arts (all specializations)
+- Faculty of Engineering (all specializations)
+
+### Baalbek Campus
+Programs offered: Business Administration (all tracks), Computer Science, Graphic Design, Interior Design, Nursing Sciences, Translation, Hotel Management, Tourism and Travel Guidance.
+
+### Tyre (Sour) Campus
+Programs offered: Business Administration, Translation, Graphic Design, Interior Design.
+# IUL Faculties and Academic Programs
+
+IUL offers Undergraduate (Bachelor's/License), Graduate (Master's), and Postgraduate (PhD) programs.
+
+## Faculty of Engineering
+Located primarily at the Wardanieh campus. IUL was the first university in Lebanon to offer specialized degrees in Biomedical Engineering and Surveying Engineering.
+
+Bachelor's programs (5-year Engineering Diploma):
+- Computer and Communications Engineering
+- Surveying Engineering
+- Biomedical Engineering Technologies
+- Civil Engineering
+
+Master's programs:
+- Master's in Biomedical Engineering Technologies
+- Master's in Computer Science and Communications
+
+## Faculty of Law
+A highly regarded faculty established by Decree No. 1948 dated 21/12/1999.
+
+Bachelor's programs (License - 3 years, under Lebanese University supervision):
+- Law (general)
+
+Diploma of Higher Studies:
+- Private Law
+- Business Law
+- Public Law
+
+Master's programs:
+- Private Law
+- Business Law
+- Public Law
+- Arbitration (pending)
+- Administrative Law (pending)
+
+PhD programs:
+- PhD in Law
+
+## Faculty of Economics and Business Administration
+(Formerly the Higher Institute of Administration, renamed by Decree 673 dated 28/08/2007)
+
+Bachelor's programs (License - 3 years):
+- Business Management
+- Marketing
+- Accounting
+- Management Information Systems
+- Banking and Finance
+- Industrial Management
+- Economics
+
+Master's programs:
+- Accounting Audit
+- Financial Management
+- Educational Administration
+- Hospital Management
+- Business Administration (MBA)
+- Information Systems Management
+- Economic Sciences (pending teaching authorization)
+
+## Faculty of Sciences and Arts
+(Formerly the University Institute of Applied Technology, renamed by Decree 673 dated 28/08/2007)
+
+Bachelor's programs (License - 3 years):
+- Graphic Design
+- Computer Science
+- Biology
+- Interior Design
+- Mathematics
+- Chemistry
+- Biochemistry (not yet activated)
+
+## Faculty of Letters and Human Sciences
+(Formerly the Higher Institute of Languages and Translation)
+
+Bachelor's programs (License):
+- Psychology
+- Languages (Arabic, French, English literature)
+- Geography
+- History
+- Philosophy
+- Translation
+
+Diploma programs:
+- Arabic Language and Literature
+- French Language
+- English Language
+- Geography, History, Philosophy
+
+Master's programs:
+- Arabic Language and Literature
+- French Language and Literature
+- English Language and Literature
+- Geography
+- History
+- Philosophy
+- Psychology
+- Translation
+
+PhD programs:
+- PhD in Arabic Language and Literature
+
+## Faculty of Public Health
+(Formerly Faculty of Nursing Sciences, then Faculty of Nursing and Health Sciences, renamed to Faculty of Public Health by Decree 8849 dated 25/02/2022)
+
+Bachelor's programs:
+- Nursing Sciences (3 years)
+- Speech Therapy / Speech Correction (4 years)
+- Physical Therapy (4 years)
+- Laboratory Sciences (3 years)
+- Nutrition and Dietetics (3 years - not yet activated)
+- Midwifery (4 years - not yet activated)
+
+## Faculty of Tourism Sciences
+Bachelor's programs (License):
+- Hotel Management
+- Tourism Sciences (Tourism and Tour Guiding, Health Tourism - not yet activated)
+- Travel and Airline Services
+
+Master's programs:
+- Master's in Tourism Guidance and Travel
+- Master's in Hotel Management
+
+## Faculty of Islamic Studies
+Bachelor's programs (License):
+- Islamic Sciences
+- Sharia (Islamic Law)
+
+Master's programs:
+- Islamic Sciences
+
+PhD programs:
+- PhD in Islamic Sciences
+
+## Faculty of Political, Administrative and Diplomatic Sciences
+Established by Decree No. 1948 dated 21/12/1999.
+
+Bachelor's programs (License):
+- Political Science
+- International Relations and Diplomacy
+- Administrative Sciences (not yet activated)
+
+Diploma of Higher Studies:
+- Political Sciences
+- International Relations and Diplomacy
+- Administrative Sciences
+
+Master's programs:
+- Political Science
+- International Relations and Diplomacy
+
+PhD programs:
+- PhD in Political Science
+- PhD in International Relations and Diplomacy
+# IUL Financial Information — Fees and Scholarships
+
+## Application and Registration Fees
+- Application file fees must be paid at the Accounting Department (Financial Affairs Unit) in advance
+- These fees are non-refundable
+- Students are not officially registered until course fees for the semester are paid
+
+## Scholarships Available
+IUL offers the following types of financial support:
+- Merit-Based Scholarships: for top-ranking high school students
+- Athletic Scholarships: for students with exceptional athletic achievements
+- Financial Aid Plans: flexible plans for students demonstrating financial need
+
+## Social Security (CNSS)
+Students must provide a Social Security (CNSS) affiliation certificate as part of their admission documents. This is required for both undergraduate and graduate admissions.
+
+## Tuition Refund Policy
+Refund conditions and modalites are defined by the university's financial regulations. Students who withdraw from courses may be eligible for partial refunds depending on the timing of withdrawal relative to the academic calendar.
+
+## Fees for Special Programs
+- Pre-Doc (PhD Preliminary Semester): Registration fees apply for the Pré-Doc semester (Spring 2026). The exact amount is announced when the student submits a complete file to the Admissions and Orientation Office.
+- PhD Program: 180 ECTS credits total. Fees are paid per semester. After paying for all 180 credits, only administrative registration fees apply for additional years.
+- Summer Session: Available for students needing 1-16 credits to complete their degree. Starts third week of June, runs maximum 10 weeks.
+# IUL Founders and Leadership History
+
+## Founding Vision
+The Islamic University of Lebanon was inspired by the founding vision of Imam Sayyed Moussa El-Sader, who aimed to make higher education accessible to all segments of Lebanese society, particularly the marginalized. Imam El-Sader believed that education was a fundamental right for every citizen regardless of their background.
+
+## Founding Execution
+The vision was brought to life and officially executed by the late Imam Sheikh Mohammad Mahdi Shams Al-Din, who worked to establish the university as a formal institution of higher learning.
+
+## Expansion
+The university was later expanded by Imam Sheikh Abdul Amir Qablan, who helped grow its reach and academic programs across Lebanon.
+
+## Establishment
+IUL was officially established in 1996 by Lebanese Presidential Decree No. 8600, making it a recognized institution of higher education under Lebanese law.
+
+## Current Leadership
+Professor Dr. Hassan Al-Laqis currently serves as President of the Islamic University of Lebanon.
+
+## Affiliation
+IUL operates under the umbrella of the Supreme Islamic Shiite Council in Lebanon but maintains full administrative, educational, and financial autonomy. The university is open to all Lebanese citizens regardless of religion or background, in line with its motto: "A University for all country citizens and the Arab world."
+# Islamic University of Lebanon (IUL) — General Information
+
+## Overview
+The Islamic University of Lebanon (IUL) is a private, non-profit higher education institution in Lebanon. It was officially established in 1996 by Lebanese Presidential Decree No. 8600. Its motto is "A University for all country citizens and the Arab world."
+
+## History and Foundation
+IUL was inspired by the founding vision of Imam Sayyed Moussa El-Sader, who aimed to make higher education accessible to all segments of Lebanese society, particularly the marginalized. The vision was brought to life by the late Imam Sheikh Mohammad Mahdi Shams Al-Din and later expanded by Imam Sheikh Abdul Amir Qablan.
+
+IUL operates under the umbrella of the Supreme Islamic Shiite Council in Lebanon but maintains administrative, educational, and financial autonomy.
+
+## Accreditation and Rankings
+- All degrees are fully recognized by the Lebanese Ministry of Education and Higher Education (MEHE).
+- IUL holds a prestigious 5-year unreserved institutional accreditation from HCERES (the French High Council for Evaluation of Research and Higher Education), marking compliance with international and European educational standards.
+- IUL is ranked in the #1001-1200 bracket globally in the QS World University Rankings and within the top 100 in the Arab Region Rankings.
+
+## Contact Information
+- Website: www.iul.edu.lb
+- Main Phone: 05/807711-16
+- Fax: 05/807719
+- Email: iul@iul.edu.lb
+- Main Address: Khaldeh, General Highway, P.O. Box 30014
+
+## Current University President
+Professor Dr. Hassan Al-Laqis
+
+## Languages of Instruction
+Programs are taught in Arabic, English, and French depending on the specialization. Many programs in Engineering, Business, and Health Sciences are taught in English and French. The university has a dedicated Language Center.
+
+## Student Life
+- IUL hosts over 30 active student societies ranging from sports and arts to programming, debate, and translation clubs.
+- Graduates from faculties like Engineering and Law are fully eligible to join Lebanese professional syndicates (e.g., the Order of Engineers and Architects, and the Bar Associations).
+
+## Academic Centers
+- Research Center (REC): Promotes research quality and public service across faculties.
+- Center for Continuing Education (CCE): Lifelong learning programs, professional training, and language courses.
+- Learning and Teaching Excellence Center (LTEC): Supports faculty in developing teaching methods and academic performance.
+- Language Center (LCR): Serves students who need language support in English, French, or other languages. Collaborates with British Council, Institut Français, Goethe Institute, and others.
+- Human Rights Center (HRC): Promotes human rights culture, tolerance, and civic responsibility.
+- Career Center (CRC): Helps graduates with career planning, job fairs, and employment opportunities.
+
+## Student Population (by campus)
+- Khaldeh: 2,504 students
+- Wardanieh: 1,812 students
+- Tyre (Sour): 3,380 students
+- Baalbek: 1,665 students
+- Majdal Balhiss (Sahmar): 122 students (license pending)
+- South Metn Coast (Bourj El Barajneh): 654 students (license pending)
+# IUL Student Services and Campus Life
+
+## Admissions and Orientation Office
+The main point of contact for all admission-related processes. Students submit their application files here and can get guidance on program selection, transfer credits, and registration procedures.
+
+## Language Center
+The Language Center serves students who need language support in English or French (the main languages of instruction at IUL). It also offers courses in other languages including Italian, Spanish, German, Portuguese, Chinese, Persian, Turkish, Russian, and more.
+
+The Language Center collaborates with:
+- British Council (Lebanon)
+- Institut Français (French Embassy in Lebanon)
+- Agence Universitaire de la Francophonie (AUF)
+- Goethe Institute (German)
+- Confucius Institute (Chinese)
+- Cervantes Institute (Spanish)
+- Istituto Italiano di Cultura (Italian)
+- Russian Cultural Center
+
+Students are assessed using the Common European Framework of Reference for Languages (CEFR).
+
+## Career Center
+The Career Center helps graduates with:
+- Career planning and professional guidance
+- CV preparation and interview skills
+- Annual job fair on campus
+- Connecting students with employers through partnership agreements
+- Professional training and internship programs
+- Networking opportunities
+
+## Student Activities and Clubs
+IUL hosts over 30 active student societies covering:
+- Sports
+- Arts and culture
+- Programming and technology
+- Debate
+- Translation
+- Community service
+- And more
+
+## Professional Integration
+Graduates from IUL faculties are eligible to join Lebanese professional syndicates:
+- Engineering and Architecture graduates: eligible for the Order of Engineers and Architects (Beirut/Tripoli)
+- Law graduates: eligible for the Bar Associations (Beirut/Tripoli)
+
+## Student Forms and Procedures
+
+### Registration-Related
+- RPRA001: Request for maximum credit enrollment (final semester)
+- RPRA002: Program change request
+- RPRA003: Dual program enrollment request
+- RPRA005: Sub-specialization enrollment request
+- RPRA006: Conditional admission commitment letter
+- RPRA007: Study interruption request
+- RPRA008: Re-registration request
+
+### Admission-Related
+- ADM001 (AR/EN/FR): University admission application
+- ADM002: Transfer application evaluation form
+- RPRA008: Readmission form
+- RPRA010: Request for admission as free listener/auditor
+- RPRA011: Visiting student admission request
+- RPRA012.1/12.2: Non-degree student admission
+- RPRA013: Foreign visiting student request
+
+### Academic Services
+- RPRA009: Petition for additional language remedial session
+- RPRA014: Cross-registration request (courses at other universities)
+- RPRA016: Request to withdraw from all enrolled courses
+- RPRA017: Study interruption form
+- RPRA021: Campus change request
+
+### Graduation-Related
+- RPRA022: Code of Ethics signing
+- RPRA023: Graduation suspension request
+- RPRA024: Diploma application
+- RPRA025: Authorization for diploma collection by representative
+- RPRA026: Duplicate diploma request
+
+## Academic Support
+
+### Center for Continuing Education (CCE)
+Offers professional development programs, non-academic certificates, language courses, and specialized corporate training.
+
+### Learning and Teaching Excellence Center (LTEC)
+Supports faculty in improving teaching methods and helps graduate students preparing for academic careers.
+
+### Research Center (REC)
+Located within each faculty. Promotes research and public service. Coordinated through the Supreme Council for Scientific Research.
+
+### Human Rights Center (HRC)
+Promotes human rights culture, tolerance, mutual respect, equal rights, social justice, and civic responsibility. Affiliated with the Faculty of Law.
+
+## Medical and Health Resources
+The university provides health-related student support services for students in health-related programs (Physical Therapy, Nursing, Speech Therapy, etc.) who require clinical training and hospital internships.
+
+## Important Contacts
+- Main University: 05/807711-16
+- Fax: 05/807719
+- Email: iul@iul.edu.lb
+- Website: www.iul.edu.lb

@@ -1,4 +1,5 @@
 {
+  "name": "Agent Workflow",
   "nodes": [
     {
       "parameters": {
@@ -9,13 +10,13 @@
           "binaryPropertyName": "data"
         }
       },
-      "id": "d0dccd09-52ab-41e3-8468-b0a7b13cae9e",
+      "id": "5e9587a9-3338-48ba-b849-47fe6428ecda",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        928,
-        2912
+        -1424,
+        176
       ],
       "webhookId": "rag-agent-webhook"
     },
@@ -77,57 +78,77 @@
         },
         "options": {}
       },
-      "id": "10e71563-aa81-446a-9e25-d47cb560639f",
+      "id": "31574e8b-fca1-43f8-8094-4bb251c812d9",
       "name": "Switch (Audio or Text)",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        1136,
-        2912
+        -1200,
+        176
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Ensure the upload is reachable as data0, and expose it as base64\n// (+ mime) so the Gemini STT HTTP node can inline it as JSON.\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0 && !item.binary.data0) {\n      item.binary.data0 = item.binary[keys[0]];\n    }\n    if (item.binary.data0) {\n      const buf = await this.helpers.getBinaryDataBuffer(i, 'data0');\n      item.json.audioB64 = buf.toString('base64');\n      item.json.audioMime = item.binary.data0.mimeType || 'audio/webm';\n    }\n  }\n}\nreturn items;"
+        "jsCode": "const items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0 && !item.binary.data0) {\n      item.binary.data0 = item.binary[keys[0]];\n    }\n    if (item.binary.data0) {\n      const buf = await this.helpers.getBinaryDataBuffer(i, 'data0');\n      item.json.audioB64 = buf.toString('base64');\n      item.json.audioMime = item.binary.data0.mimeType || 'audio/webm';\n    }\n  }\n}\nreturn items;"
       },
-      "id": "5d0ea095-20e7-48c2-8303-19db5965d53d",
+      "id": "3754db73-60d8-475c-b40e-01a2f20f4541",
       "name": "Normalize Binary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1328,
-        2768
+        -976,
+        32
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googlePalmApi",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: \"Transcribe this audio verbatim. Return only the transcript text, with no extra commentary.\" }, { inline_data: { mime_type: $json.audioMime, data: $json.audioB64 } } ] } ] }) }}",
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "whisper-large-v3-turbo"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            },
+            {}
+          ]
+        },
         "options": {
           "timeout": 60000
         }
       },
-      "id": "c3ca10ce-7b64-4d62-87c7-e7e15b4e5ff8",
+      "id": "da337a1b-2f94-4060-9cbe-568c5caa8f10",
       "name": "Gemini STT",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1536,
-        2768
+        -752,
+        32
       ],
-      "onError": "continueErrorOutput",
       "credentials": {
         "googlePalmApi": {
-          "id": "8CCAGWb187BYrp2c",
+          "id": "3NeEadTXR21DloX6",
           "name": "Google Gemini(PaLM) Api account"
+        },
+        "httpHeaderAuth": {
+          "id": "N3iMBOrGzdiqEOnM",
+          "name": "Header Auth account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -143,13 +164,13 @@
         },
         "options": {}
       },
-      "id": "903d168c-e254-450f-bc5d-9e80e64274bd",
+      "id": "bf59e4bd-8a91-456e-8a09-315ff425aa08",
       "name": "Set userText (Audio)",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1760,
-        2864
+        -528,
+        256
       ]
     },
     {
@@ -166,13 +187,13 @@
         },
         "options": {}
       },
-      "id": "2c9277ec-2a12-4508-8f85-6459b4b5d174",
+      "id": "2e730e83-89dc-45a0-9c1c-b2ab0bf8c8f1",
       "name": "Set userText (Text)",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1744,
-        3056
+        -528,
+        512
       ]
     },
     {
@@ -180,16 +201,16 @@
         "promptType": "define",
         "text": "=user message :\n{{ $json.userText }}",
         "options": {
-          "systemMessage": "You are a friendly customer-support assistant for the Islamic University of Lebanon (IUL).\n\nLANGUAGE RULES:\n- Detect the language of the user's latest message and always write your final answer in that same language. If they write in Arabic, answer in clear, natural Modern Standard Arabic; if in English, answer in English.\n- You may search the knowledge base in English even when the user asked in Arabic, but the answer you return must be in the user's language.\n\nTOOL USAGE RULES:\n- For any factual question about IUL — its faculties, campuses, history, founding vision, accreditation, programs, admissions, languages of instruction, student life, specific people or dates — you MUST call the Search_Local_Documents tool first with the user's question as the search query. NEVER pass an empty query. If the tool returns nothing useful, say you could not find that information rather than guessing.\n- For greetings, small talk, thanks, goodbyes, or clarification requests about your previous answer, reply directly without calling the tool.\n- When you introduce yourself, say you are the IUL Agent and you can answer questions about the Islamic University of Lebanon.\n\nVOICE FORMAT RULES:\n- No markdown, no asterisks, no hashtags, no bullet points, no emojis.\n- Use natural spoken transitions like First, Next, and Finally.\n- Keep sentences short and conversational.\n- Two to four short sentences is usually enough."
+          "systemMessage": "You are a friendly bilingual AI receptionist for the Islamic University of Lebanon (IUL) and the HAICI center.\n\nLANGUAGE RULES:\n\nDetect the language of the user's latest message and always write your final answer in that same language. If they write in Arabic, answer in clear, natural Modern Standard Arabic; if in English, answer in English.\n\nTOOL USAGE RULES:\n\nFor greetings, small talk, thanks, goodbyes, reply directly without searching.\nFor any factual question about IUL, use the knowledge base below first before answering.\nKeep answers concise, two to four sentences maximum.\nNo markdown, no bullet points, no asterisks. Use natural spoken language only.\n\nKNOWLEDGE BASE:\nIUL was established in 1996 by Presidential Decree No. 8600. Founded by Imam Sayyed Moussa El-Sader, executed by Imam Sheikh Mohammad Mahdi Shams Al-Din, expanded by Imam Sheikh Abdul Amir Qablan. Current president: Professor Dr. Hassan Al-Laqis. Motto: A University for all country citizens and the Arab world. Website: www.iul.edu.lb. Phone: 05/807711-16. Email: iul@iul.edu.lb. Accredited by HCERES (France). Ranked #1001-1200 globally (QS). Top 100 Arab region.\n\nCAMPUSES: Khaldeh (main campus, south of Beirut, headquarters); Wardanieh (Chouf District, Engineering, HAICI center); Tyre/Sour (South Lebanon, 3380 students); Baalbek (Bekaa Valley, opened 2014); Majdal Balhiss/Sahmar (license pending); Bourj El Barajneh (license pending). Student population: Khaldeh 2504, Wardanieh 1812, Tyre 3380, Baalbek 1665.\n\nFACULTIES: Engineering (Computer & Communications, Surveying, Biomedical, Civil - 5 year diploma, Wardanieh campus. First in Lebanon to offer Biomedical and Surveying Engineering). Law (License, Master, PhD). Economics and Business Administration (Management, Marketing, Accounting, MIS, Banking, MBA). Sciences and Arts (Graphic Design, Computer Science, Biology, Interior Design, Math, Chemistry). Letters and Human Sciences (Psychology, Languages, Translation, Geography, History, Philosophy). Public Health (Nursing, Speech Therapy, Physical Therapy, Lab Sciences). Tourism Sciences (Hotel Management, Travel and Airline Services). Islamic Studies (Islamic Sciences, Sharia). Political Administrative and Diplomatic Sciences (Political Science, International Relations).\n\nADMISSIONS: Fall deadline August 30. Spring deadline January 15. Required documents for Bachelor's: ID copy, 2 passport photos, secondary school grades, Lebanese Baccalaureate or equivalent certified by Ministry of Education, Social Security certificate. For Master's: add university transcripts, 2 recommendation letters, personal statement, CV. Students not officially registered until course fees are paid.\n\nACADEMIC SYSTEM: Uses European ECTS credit system. Bachelor's 3-5 years. Master's 2-4 years. PhD 3-5 years (180 ECTS). Passing grade: 10/20 general, 12/20 for Engineering. Attendance: 70% minimum for lectures, 90% for labs. Academic year: Fall (September to January), Spring (February to June), optional Summer session.\n\nSCHOLARSHIPS: Merit-Based (top high school students), Athletic Scholarships, Financial Aid Plans for students with financial need.\n\nHAICI: Humanity-AI Driven Center for Innovation, located at Wardanieh campus. Head: Dr. Rodayna Hmede. Teams: IT and Technical, Social Media and Marketing (co-led by Mariam Hassan Badawi), Research and Development, Event and Project Management. Initiatives: National Youth Strategy 2026-2030, Designing Hope in Action Hackathon, AI workshops and seminars. Projects include the IUL AI Receptionist - a bilingual Arabic/English conversational assistant.\n\nSTUDENT SERVICES: Language Center (English, French, and 10+ other languages, partners with British Council and Institut Français). Career Center (job fairs, CV help, employer connections). Over 30 student clubs. Engineering graduates eligible for Order of Engineers. Law graduates eligible for Bar Association."
         }
       },
-      "id": "956140dc-2e07-492b-9f5b-4eaad875399d",
+      "id": "0d71c083-9a4b-4e43-be70-1481c4c05f44",
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        2016,
-        2912
+        -240,
+        416
       ],
       "onError": "continueErrorOutput"
     },
@@ -197,15 +218,15 @@
       "parameters": {
         "sessionIdType": "customKey",
         "sessionKey": "={{ $('Webhook').item.json.body?.sessionId || 'default-session' }}",
-        "contextWindowLength": 10
+        "contextWindowLength": 3
       },
-      "id": "0490c46e-612a-45c9-baf2-cce483ef4724",
+      "id": "4bcb8894-49e9-4ad6-9129-4227ef1334f6",
       "name": "Window Buffer Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        2032,
-        3152
+        -176,
+        640
       ]
     },
     {
@@ -217,17 +238,17 @@
         },
         "options": {}
       },
-      "id": "aa7e15d0-7329-4c82-896e-9cec609b4e25",
+      "id": "e7bf23c7-6975-4422-b541-44ea0a7cb006",
       "name": "Qdrant Vector Store",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
       "position": [
-        2080,
-        3376
+        -144,
+        848
       ],
       "credentials": {
         "qdrantApi": {
-          "id": "utp8208FXQyS33EP",
+          "id": "s8y82MhojZO6aenN",
           "name": "Qdrant account"
         }
       }
@@ -235,53 +256,54 @@
     {
       "parameters": {
         "name": "Search_Local_Documents",
-        "description": "Search the IUL knowledge base for factual information about the Islamic University of Lebanon — faculties, campuses, history, accreditation, programs, admissions, languages of instruction. The input should be the user's question or a few keywords from it. Never pass an empty string."
+        "description": "Search the IUL knowledge base for factual information about the Islamic University of Lebanon — faculties, campuses, history, accreditation, programs, admissions, languages of instruction. The input should be the user's question or a few keywords from it. Never pass an empty string.",
+        "topK": "={{ 3 }}"
       },
-      "id": "1c69f3b8-5d3d-428c-b7ee-b02c84b9e013",
+      "id": "c266f358-ef4c-4e80-aa5d-4bfaac2361d7",
       "name": "Search_Local_Documents",
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1,
       "position": [
-        2192,
-        3152
+        -48,
+        640
       ]
     },
     {
       "parameters": {
-        "options": {},
-        "modelName": "models/gemini-3-flash-preview"
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
       },
-      "id": "f051ce9f-69a7-49db-beee-c9336a1fa301",
+      "id": "ee3342c6-2fec-4365-b212-732a7aad9c4c",
       "name": "Gemini (Tool LLM)",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1.1,
       "position": [
-        2512,
-        3536
+        144,
+        848
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "8CCAGWb187BYrp2c",
+          "id": "3NeEadTXR21DloX6",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
     {
       "parameters": {
-        "options": {},
-        "modelName": "models/gemini-3.1-pro-preview"
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
       },
-      "id": "952b40f0-bcd8-44d9-8992-a9d44fd32890",
+      "id": "4e9e581a-f356-43b9-8b34-ab947642870e",
       "name": "Gemini (Agent LLM)",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1.1,
       "position": [
-        1808,
-        3328
+        -304,
+        640
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "8CCAGWb187BYrp2c",
+          "id": "3NeEadTXR21DloX6",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -312,13 +334,13 @@
         },
         "options": {}
       },
-      "id": "8c5662a1-6c04-4e55-9a58-fff035eb10da",
+      "id": "0dd1e28a-6c48-44c2-b9d7-63019a3faf9c",
       "name": "Keep Answer Text",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2352,
-        2912
+        352,
+        464
       ]
     },
     {
@@ -346,13 +368,13 @@
         },
         "options": {}
       },
-      "id": "c95dffe0-521c-4168-b954-48bd8abd2b78",
+      "id": "45ab3653-ec65-49a6-96df-8b762bb742b9",
       "name": "IF (wantsAudio?)",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2560,
-        2912
+        576,
+        464
       ]
     },
     {
@@ -362,40 +384,41 @@
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
-        "contentType": "json",
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: $json.answer } ] } ], generationConfig: { responseModalities: [\"AUDIO\"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: \"Kore\" } } } } }) }}",
         "options": {
           "timeout": 60000
         }
       },
-      "id": "8e5fdf30-953b-46e8-bd56-e1a5750ff438",
+      "id": "38e5fc97-c3fa-4305-be92-90522dbab4a3",
       "name": "Gemini TTS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2768,
-        2768
+        800,
+        384
       ],
-      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
       "credentials": {
         "googlePalmApi": {
-          "id": "8CCAGWb187BYrp2c",
+          "id": "3NeEadTXR21DloX6",
           "name": "Google Gemini(PaLM) Api account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
         "jsCode": "const answer = $('Keep Answer Text').first().json.answer;\nconst question = $('Keep Answer Text').first().json.question;\n\n// Gemini TTS returns base64 PCM (signed 16-bit LE, mono) in inlineData.\nconst part = $json.candidates?.[0]?.content?.parts?.[0];\nconst pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\nif (!pcmB64) {\n  return [{ json: { answer, question: question || '', audioMime: '', audioBase64: '' } }];\n}\nconst mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\nconst m = mime.match(/rate=(\\d+)/);\nconst sampleRate = m ? parseInt(m[1], 10) : 24000;\nconst channels = 1, bitsPerSample = 16;\nconst pcm = Buffer.from(pcmB64, 'base64');\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + pcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(pcm.length, 40);\nconst wav = Buffer.concat([h, pcm]);\n\nreturn [{ json: { answer, question: question || '', audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];"
       },
-      "id": "800c7136-d5f6-4cd7-a971-e3d042b449a0",
+      "id": "e55d005f-da8d-47c5-b7ea-56b46c009b98",
       "name": "Build JSON (Text + Audio)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2976,
-        2768
+        1024,
+        336
       ]
     },
     {
@@ -421,13 +444,13 @@
           }
         }
       },
-      "id": "44c7473e-1559-4627-a124-92e83934471b",
+      "id": "8123c28b-56c7-47f6-92db-6eeb6c012426",
       "name": "Respond (Text + Audio)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        3184,
-        2768
+        1248,
+        336
       ]
     },
     {
@@ -453,13 +476,13 @@
           }
         }
       },
-      "id": "667a1f81-4ba2-40d1-9784-959d7fc9f79a",
+      "id": "1bf79fe0-ced1-40e6-a926-83360d01dfe6",
       "name": "Respond (Text Only)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2928,
-        3072
+        1024,
+        560
       ]
     },
     {
@@ -485,35 +508,34 @@
           }
         }
       },
-      "id": "bffa15ea-fa7a-4594-833a-7355e121b361",
+      "id": "6a2c4cb3-d525-489f-906c-ce1ec0cf4019",
       "name": "Respond (Error)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2352,
-        2576
+        352,
+        0
       ]
     },
     {
-      "parameters": {
-        "modelName": "models/gemini-embedding-001"
-      },
+      "parameters": {},
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1952,
-        3536
+        -64,
+        1056
       ],
-      "id": "45482028-8a37-481e-ad16-36d0082a9743",
+      "id": "2be98805-992f-4a96-8491-388f2f59dd99",
       "name": "Embeddings Google Gemini",
       "credentials": {
         "googlePalmApi": {
-          "id": "8CCAGWb187BYrp2c",
+          "id": "3NeEadTXR21DloX6",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -738,9 +760,16 @@
       ]
     }
   },
-  "pinData": {},
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8e1e7dcf-cf8e-4335-9805-a103efe79f92",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "8bdbf1bc91037a165582246937af5b6fa5fdc2fc8711ad6e0194ee5b94944d65"
-  }
+    "instanceId": "e45265a3a5a0e6b9ecd4cd587767717341e4aa817eccf8b5edf21577ef6b9a1b"
+  },
+  "id": "d8nftRI2zhutW98L",
+  "tags": []
 }

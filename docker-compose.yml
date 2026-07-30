@@ -19,16 +19,13 @@ services:
       - NODES_EXCLUDE=
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       - N8N_RESTRICT_FILE_ACCESS_TO=/shared_docs
-      # CORS — required for the browser UI at http://localhost:5173 to call
-      # the webhook. Without this, ANY n8n error response (workflow inactive,
-      # internal exception, preflight, etc.) ships without CORS headers and
-      # the browser reports it as "Cross-Origin Request Blocked / Status (null)".
       - N8N_CORS_ALLOW_ORIGIN=*
     volumes:
       - ./n8n_local_data:/home/node/.n8n
       - ./shared_docs:/shared_docs
     depends_on:
       - qdrant
+      - whisper
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -39,22 +36,26 @@ services:
     volumes:
       - ./qdrant_data:/qdrant/storage
 
-  # ── WEB UI (Vite + React + TS + Tailwind, run with Bun) ─────────
-  # Dev server with HMR. Source mounted from ./web; node_modules kept
-  # in an anonymous volume so the host bind-mount doesn't shadow them.
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    container_name: whisper
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER__MODEL=base
+      - WHISPER__INFERENCE_DEVICE=cpu
+    volumes:
+      - ./whisper_data:/root/.cache/huggingface
+
   web:
     build: ./web
     container_name: web
     restart: unless-stopped
     ports:
       - "5173:5173"
-      # WebSocket relay (ws-server.ts) — the ESP32 connects directly to this
-      # over the LAN, bypassing Vite. Must be published to the host.
       - "3001:3001"
     environment:
-      # Relative URL — Vite proxies /webhook/* to the n8n container internally,
-      # which means the browser sees a same-origin request and CORS is never
-      # involved. See web/vite.config.ts for the proxy config.
       - VITE_N8N_WEBHOOK_URL=/webhook/rag-agent
       - VITE_APP_TITLE=IUL Agent
       - CHOKIDAR_USEPOLLING=true

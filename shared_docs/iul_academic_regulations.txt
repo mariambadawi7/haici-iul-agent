@@ -1,0 +1,122 @@
+# IUL Academic Regulations — Grading, Transfer, and Student Rules
+
+## Grading System (ECTS)
+IUL uses the European ECTS grading system.
+
+Passing grades:
+- General passing grade: 10/20 or 50/100 (ECTS) or 60/100 (American credit system)
+- Engineering and some specialized programs: passing grade is 12/20 or 60/100 (ECTS)
+- Master's level: minimum passing grade for transfer is 55/100 or 11/20 (ECTS), or 70/100 (American system)
+
+Alphabetic grades (ECTS): A, B, C, D (passing); F (fail)
+Note: Faculty of Engineering and Faculty of Public Health do not accept grade D for course transfers.
+
+## Transfer of Credits (Course Transfer Rules)
+
+### General Rules
+- A course whose prerequisite has not been validated cannot be transferred. Both the prerequisite and the dependent course must be transferred together.
+- The transferred course must have the same contact hours and cover at least 75% of the equivalent course content at IUL.
+- Maximum transferable credits: 50% of total program credits (per Ministerial Decree No. 780/3/2013)
+- Exception: Engineering Faculty allows up to 120 ECTS transfer out of 300 ECTS total.
+
+### Transfer Codes on Transcript
+- "T" = transferred course (from external university)
+- "G" = course exemption/dispensation (granted without a grade, does not affect GPA)
+- Internal IUL transfers between faculties: marked with an asterisk, keep their original grade (not "T")
+
+### Engineering Faculty Transfer Requirements
+- Courses must come from accredited Engineering programs
+- Transfer only accepted from institutions recognized by the Order of Engineers
+- Candidates must pass an English Proficiency Test (IUL-EPT) with a minimum score of 60/100
+
+### Courses That Cannot Be Transferred
+- Courses obtained through internships or thesis projects
+- Courses from a student currently on academic probation at the origin university
+- Academic probation means the student received a warning due to insufficient results without being expelled
+
+### Transfer Application Process
+Submit transfer file to the Admissions and Orientation Office (BAO) at least 4 weeks before registration begins, including:
+- Certified copy of transcript
+- Course descriptions and syllabi for each course
+
+### If Student Registers for an Already-Transferred Course
+The transfer "T" is removed from the transcript and replaced by the new grade obtained at IUL.
+
+### Courses Completed at IUL Cannot Be Retransferred
+Courses that a student completed at IUL cannot be taken elsewhere and retransferred back to IUL.
+
+## Re-admission After Academic Interruption
+
+### 3-Year Interruption
+Full re-examination of equivalency file. Courses still in the current curriculum with satisfactory grades will be counted.
+
+### 5-Year Interruption
+Without legitimate force majeure justification, the student permanently loses the right to resume their academic path. No credits are recognized except:
+- Courses with grade A or B (for Humanities, Tourism, Islamic Studies, Law, Economics, Political Sciences)
+- Engineering, Technology, Sciences, and Public Health: recognition after 5 years is NOT automatic; handled on a case-by-case basis
+
+### Master's Level
+Minimum duration: 2 years; Maximum: 4 years. Unjustified interruption does not grant any right to extension.
+
+## Academic Probation
+- Bachelor's students: two semesters on academic probation leads to conditional admission. After the 3rd semester, if the student still doesn't meet the required average, they must change their specialization.
+- Master's students: may only re-register for failed courses once. If they fail again, they must change their specialization.
+- Students on academic probation may register for failed courses plus a maximum of 2-3 additional courses.
+
+## Changing Specialization or Program
+Students can request a change of specialization using form RPRA002FR. A change between two different programs may allow transfer of general education courses and introductory courses. No transfer of credits from Level 2 to Level 1 or vice versa is permitted.
+
+## Course Withdrawal
+Students can withdraw from all courses in a semester using form RPRA016EN. The student will receive grade F if they exceed the absence limit and do not withdraw before the final exam.
+
+## Free Listener (Auditor) Status
+Students can apply to attend courses as a free listener (non-degree seeking) using form RPRA010FR/EN.
+
+## Cross Registration
+Students can register for courses at other universities using form RPRA014EN.
+
+## Changing Campus
+Students can request a campus change using form RPRA021EN (Week 13 deadline).
+
+## Graduation
+
+### Conditions for Graduation
+- Complete all required credits for the program
+- Achieve the required cumulative GPA
+- Complete all general education requirements
+- Pay all financial obligations
+
+### Graduation Suspension
+Students who are not ready to receive their diploma can apply for graduation suspension using form RPRA023EN/FR.
+
+### Diploma Collection
+Students collect their diploma using form RPRA024AR/FR after completing all graduation requirements.
+
+### Duplicate Diploma
+Students who lose their diploma can request a duplicate using form RPRA026AR.
+
+## Master's Thesis Process
+
+### Key Steps
+1. Choose thesis topic and supervisor (form 001)
+2. Appoint supervisor (form 002)
+3. Calendar for supervision and follow-up (form 003)
+4. Pre-defense announcement (form 007)
+5. Thesis defense announcement (form 013)
+6. Defense evaluation (form 014/015)
+7. Thesis submission (form 011)
+
+### Thesis Requirements
+- Must publish 2 original research papers in peer-reviewed indexed journals before the thesis defense
+- Cannot defend thesis without completing all required coursework
+- Plagiarism detection is mandatory (form 019FR)
+
+### Changing Thesis Topic or Supervisor
+- Changing thesis topic: use form 009AR
+- Changing thesis supervisor: use form 022
+
+### Contestation of Results
+Students can contest defense results using form 018FR.
+
+## Code of Ethics
+All students must sign the IUL Code of Ethics (form RPRA022EN) upon admission.

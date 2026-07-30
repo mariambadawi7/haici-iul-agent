@@ -1,0 +1,156 @@
+{
+  "name": "STT Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stt",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "file"
+        }
+      },
+      "id": "b9589c76-2707-4ea6-ac97-96d502e39d2c",
+      "name": "STT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "stt-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": []
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            },
+            {
+              "name": "model",
+              "value": "whisper-large-v3-turbo"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "50bb6e3b-56d7-469f-9661-c12d49fdcda9",
+      "name": "Groq STT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "N3iMBOrGzdiqEOnM",
+          "name": "Header Auth account"
+        },
+        "httpBearerAuth": {
+          "id": "r2wgetIKHoEeimcZ",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"text\": $json.text } }}",
+        "options": {}
+      },
+      "id": "66cbd9c2-e675-48bd-899f-3847f5306c8a",
+      "name": "Respond with Text",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        816,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  \n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0) {\n      // Grab whatever weird key name the webhook gave the file and standardize it to 'file'\n      const incomingKey = keys[0];\n      item.binary.file = item.binary[incomingKey];\n      \n      // Clean the metadata so Groq accepts it without a 400 bad request\n      item.binary.file.mimeType = 'audio/webm';\n      item.binary.file.fileName = 'speech.webm';\n      item.binary.file.fileExtension = 'webm';\n    }\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "d266e882-f8da-4ac4-bd54-055c79671128",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "STT Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq STT": {
+      "main": [
+        [
+          {
+            "node": "Respond with Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Groq STT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "dd73c0fc-eb7c-41dd-a5ed-b90127371cd7",
+  "meta": {
+    "instanceId": "e45265a3a5a0e6b9ecd4cd587767717341e4aa817eccf8b5edf21577ef6b9a1b"
+  },
+  "id": "KNUv1TRbHWl3v6oS",
+  "tags": []
+}
