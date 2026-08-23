@@ -8,10 +8,11 @@ export const config = {
    *    2) ttsUrl  → WAV for the answer (parallel with rendering text)
    *  Massively reduces "long response times out" failures. */
   ttsUrl: (env.VITE_N8N_TTS_URL as string) || "",
-  logoLeft: (env.VITE_LOGO_LEFT as string) || "",
-  logoRight: (env.VITE_LOGO_RIGHT as string) || "",
-  title: (env.VITE_APP_TITLE as string) || "IUL Agent",
 };
+
+// Logos, titles and every other visual detail moved to the runtime tenant
+// config (src/lib/branding) so they can be changed from the admin UI without
+// a rebuild. This module now covers endpoints only.
 
 export const twoStage = !!config.ttsUrl;
 

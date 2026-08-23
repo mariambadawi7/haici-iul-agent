@@ -22,6 +22,13 @@ export default defineConfig({
     strictPort: true,
     watch: { usePolling: true },
     proxy: {
+      // Tenant branding is served and persisted by the Bun sidecar running in
+      // this same container (ws-server.ts). Proxying keeps the request
+      // same-origin from the browser, exactly as /webhook does for n8n.
+      "/api": {
+        target: "http://127.0.0.1:3001",
+        changeOrigin: true,
+      },
       "/webhook": {
         target: N8N_TARGET,
         changeOrigin: true,

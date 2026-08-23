@@ -6,7 +6,11 @@
  * IndexedDB which stores them natively.
  */
 
-const DB_NAME = "iul-agent";
+import { scoped } from "./branding/scope";
+
+// Scoped per tenant for the same reason as localStorage — and resolved lazily,
+// since the tenant id arrives only after the branding fetch resolves.
+const dbName = () => scoped("audio");
 const STORE = "audio-cache";
 const VERSION = 1;
 
@@ -15,7 +19,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, VERSION);
+    const req = indexedDB.open(dbName(), VERSION);
     req.onerror = () => {
       dbPromise = null;
       reject(req.error);

@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import ChatPanel from "./components/ChatPanel";
 import MessageInput from "./components/MessageInput";
 import LandingPage from "./components/LandingPage";
+import BrandStrip, { BrandFooter } from "./components/BrandStrip";
 import HealthBanner from "./components/HealthBanner";
 import Avatar3D, { type Emotion } from "./components/Avatar3D";
 import { useChat } from "./hooks/useChat";
@@ -11,6 +12,7 @@ import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
 import { config, twoStage } from "./lib/api";
+import { useTenant } from "./lib/branding/context";
 import type { FaceState } from "./types";
 
 const STATE_LABEL: Record<FaceState, string> = {
@@ -21,10 +23,13 @@ const STATE_LABEL: Record<FaceState, string> = {
 };
 
 export default function App() {
+  const tenant = useTenant();
+  const { features, identity, avatar } = tenant;
+
   const tts = useTTS();
   const stt = useSTT();
   const chat = useChat({
-    wantsAudio: tts.enabled,
+    wantsAudio: features.voice && tts.enabled,
     onAudio: (blob) => {
       tts.playBlob(blob).catch((e) =>
         console.error("[app] TTS playback failed", e),
@@ -40,9 +45,10 @@ export default function App() {
       chatUrl: config.chatUrl,
       ttsUrl: config.ttsUrl || "(single-stage)",
       twoStage,
-      title: config.title,
+      tenant: tenant.id,
+      title: identity.name,
     });
-  }, []);
+  }, [tenant.id, identity.name]);
 
   const runHealthCheck = useCallback(() => {
     setHealth({ status: "checking" });
@@ -190,33 +196,22 @@ export default function App() {
     }, 120);
   }, [chat]);
 
-  if (view === "landing") {
+  // Tenants without the landing screen drop straight into the conversation;
+  // `view` still exists so the home button can return there when they do.
+  if (features.landing && view === "landing") {
     return <LandingPage onBegin={beginConversation} />;
   }
 
   return (
     <div className="app-shell h-screen w-screen flex flex-col overflow-hidden bg-slate-50">
       
-      {/* Top Header */}
-      <section className="brand-strip panel-elevated border-b border-bg-border z-10 shrink-0">
-        <div className="brand-row">
-          <div className="brand-icon-wrap">
-            <img src="/iul_logo.png" alt="IUL Logo" className="brand-icon" />
-          </div>
-          <div className="brand-copy">
-            <div className="brand-label">IUL • HAICI</div>
-            <h2 className="brand-heading">IUL Agent</h2>
-            <p className="brand-subtitle">
-              Premium robot assistant design for intelligent campus guidance.
-            </p>
-          </div>
-          <div className="brand-right-actions flex items-center gap-3 md:gap-5">
-            <div className="brand-icon-wrap hidden sm:block">
-              <img src="/haici_logo.png" alt="HAICI Logo" className="brand-icon" />
-            </div>
-            <button 
-              onClick={() => setView("landing")} 
-              className="btn-icon bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5 border-slate-200/80 text-slate-600 hover:text-teal-600"
+      <BrandStrip
+        className="z-10"
+        actions={
+          features.landing && (
+            <button
+              onClick={() => setView("landing")}
+              className="btn-icon bg-surface shadow-sm hover:shadow-md hover:-translate-y-0.5 border-slate-200/80 text-slate-600 hover:text-teal-600"
               title="Return Home"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -224,38 +219,61 @@ export default function App() {
                 <polyline points="9 22 9 12 15 12 15 22"></polyline>
               </svg>
             </button>
-          </div>
-        </div>
-      </section>
+          )
+        }
+      />
 
       <HealthBanner health={health} onRecheck={runHealthCheck} />
 
       {/* Main App Layout */}
-      <div className="flex-1 flex min-h-0 dashboard-grid p-4 md:p-6 gap-6">
+      <div
+        className={`flex-1 flex min-h-0 p-4 md:p-6 gap-6 ${
+          features.sidebar ? "dashboard-grid" : ""
+        }`}
+      >
         
         {/* LEFT: Sidebar History */}
-        <Sidebar
-          sessions={chat.sessions}
-          activeId={chat.activeId}
-          onSelect={chat.setActiveId}
-          onCreate={() => chat.createSession()}
-          onDelete={chat.deleteSession}
-        />
+        {features.sidebar && (
+          <Sidebar
+            sessions={chat.sessions}
+            activeId={chat.activeId}
+            onSelect={chat.setActiveId}
+            onCreate={() => chat.createSession()}
+            onDelete={chat.deleteSession}
+          />
+        )}
 
         {/* MIDDLE & RIGHT: The new Split layout */}
-        <main className="flex-1 flex flex-col lg:flex-row-reverse min-w-0 main-panel overflow-hidden border border-slate-200 shadow-sm rounded-2xl bg-white">
+        <main className="flex-1 flex flex-col lg:flex-row-reverse min-w-0 main-panel overflow-hidden border border-slate-200 shadow-sm rounded-2xl bg-surface">
           
           {/* RIGHT: Robot Command Center */}
+          {features.avatar && avatar.kind !== "none" && (
           <div className="relative shrink-0 lg:w-[22rem] flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 transition-all">
-             
-             {/* The Robot - Large on desktop, short on mobile */}
+
+             {/* The assistant — an animated 3D head, or a still image for
+                 tenants who supplied artwork instead of a rigged model. */}
              <div className="h-52 lg:h-80 w-full flex items-center justify-center">
-                <Avatar3D state={faceState} amplitude={effectiveAmplitude} emotion={emotion} />
+                {avatar.kind === "glb" ? (
+                  <Avatar3D
+                    state={faceState}
+                    amplitude={effectiveAmplitude}
+                    emotion={emotion}
+                    modelUrl={avatar.glbUrl}
+                  />
+                ) : (
+                  avatar.imageUrl && (
+                    <img
+                      src={avatar.imageUrl}
+                      alt={`${identity.name} avatar`}
+                      className="max-h-full object-contain drop-shadow-xl"
+                    />
+                  )
+                )}
              </div>
              
              {/* Beautiful Status Card */}
-             <div className="mt-4 lg:mt-8 bg-white border border-slate-200 shadow-sm rounded-2xl p-4 w-full text-center hidden lg:block">
-               <h3 className="font-serif font-semibold text-slate-800 text-lg">IUL Agent</h3>
+             <div className="mt-4 lg:mt-8 bg-surface border border-slate-200 shadow-sm rounded-2xl p-4 w-full text-center hidden lg:block">
+               <h3 className="font-serif font-semibold text-slate-800 text-lg">{identity.name}</h3>
                <div className="mt-2 flex items-center justify-center gap-2">
                  <span className="relative flex h-2.5 w-2.5">
                    {faceState !== 'idle' && (
@@ -270,13 +288,14 @@ export default function App() {
              </div>
              
              {/* Tiny Mobile Status Pill */}
-             <div className="mt-2 bg-white border border-slate-200 shadow-sm rounded-full px-4 py-1.5 flex items-center justify-center gap-2 lg:hidden">
+             <div className="mt-2 bg-surface border border-slate-200 shadow-sm rounded-full px-4 py-1.5 flex items-center justify-center gap-2 lg:hidden">
                <span className={`relative inline-flex rounded-full h-2 w-2 ${faceState === 'idle' ? 'bg-slate-300' : 'bg-teal-500'}`}></span>
                <span className="badge-serif tracking-widest text-[10px] text-slate-500">
                  {STATE_LABEL[faceState]}
                </span>
              </div>
           </div>
+          )}
 
           {/* MIDDLE: Pure Chat and Input */}
           <div className="flex-1 flex flex-col min-w-0 relative">
@@ -320,6 +339,8 @@ export default function App() {
 
         </main>
       </div>
+
+      <BrandFooter />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Mic, MicOff, Send, Volume2, VolumeX, Square, ShieldAlert, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { MicPermission, StopResult } from "../hooks/useSTT";
+import { useTenant } from "../lib/branding/context";
 
 interface Props {
   onSendText: (text: string) => void;
@@ -39,6 +40,11 @@ export default function MessageInput({
   isAssistantSpeaking,
   onStopSpeaking,
 }: Props) {
+  // Voice controls (mic, TTS toggle, stop-speaking) are hidden wholesale for
+  // tenants without the voice feature; the composer degrades to text-only.
+  const { content, features } = useTenant();
+  const voice = features.voice;
+
   const [text, setText] = useState("");
   const [recordSeconds, setRecordSeconds] = useState(0);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -108,6 +114,7 @@ export default function MessageInput({
     <div className="border-t border-bg-border bg-bg-panel/85 backdrop-blur-xl px-4 py-3">
       <div className="flex items-end gap-2 max-w-4xl mx-auto">
         {/* TTS toggle */}
+        {voice && (
         <button
           onClick={onToggleTTS}
           className="btn-icon"
@@ -120,8 +127,9 @@ export default function MessageInput({
             <VolumeX className="w-5 h-5" />
           )}
         </button>
+        )}
 
-        {isAssistantSpeaking && (
+        {voice && isAssistantSpeaking && (
           <button
             onClick={onStopSpeaking}
             className="btn-icon text-accent-pink"
@@ -133,6 +141,7 @@ export default function MessageInput({
         )}
 
         {/* Mic */}
+        {voice && (
         <button
           onClick={onMicClick}
           className={`btn-icon relative ${
@@ -174,9 +183,10 @@ export default function MessageInput({
             />
           )}
         </button>
+        )}
 
         {/* Center: recording panel OR textarea */}
-        {recording ? (
+        {voice && recording ? (
           <div className="flex-1 flex items-center gap-3 h-11 px-4 rounded-md border border-red-500/30 bg-red-500/5">
             <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse-soft" />
             <span className="text-sm font-medium text-red-200">
@@ -211,9 +221,9 @@ export default function MessageInput({
             placeholder={
               pending
                 ? "Waiting for reply…"
-                : sttPermission === "denied"
+                : voice && sttPermission === "denied"
                   ? "Mic blocked — type instead, or unblock the mic in your browser"
-                  : "Ask anything about IUL — or tap the mic to speak"
+                  : content.inputPlaceholder
             }
             className="input resize-none flex-1 max-h-[180px]"
           />
@@ -242,7 +252,7 @@ export default function MessageInput({
         <kbd className="px-1 py-0.5 bg-white/5 rounded border border-bg-border">
           Shift+Enter
         </kbd>{" "}
-        newline · voice is transcribed directly by the UI
+        newline{voice && " · voice is transcribed directly by the UI"}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import type { ChatMessage } from "../types";
 import Message from "./Message";
+import { useTenant } from "../lib/branding/context";
 
 interface Props {
   messages: ChatMessage[];
@@ -10,14 +11,6 @@ interface Props {
   onSuggestion?: (prompt: string) => void;
 }
 
-const SUGGESTIONS = [
-  "Tell me about the faculties of IUL",
-  "Where are IUL's campuses located?",
-  "What is IUL's history and founding vision?",
-  "Which accreditations does IUL hold?",
-  "What languages are programs taught in?",
-  "How do I apply to IUL?",
-];
 
 export default function ChatPanel({
   messages,
@@ -32,7 +25,7 @@ export default function ChatPanel({
   }, [messages.length]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 pb-6 bg-white">
+    <div className="flex-1 overflow-y-auto px-4 pb-6 bg-surface">
       <div className="max-w-3xl mx-auto space-y-4 pt-6">
         {messages.length === 0 ? (
           <EmptyState onSuggestion={onSuggestion} />
@@ -57,16 +50,23 @@ function EmptyState({
 }: {
   onSuggestion?: (prompt: string) => void;
 }) {
+  // Starter prompts name the client's own subject matter, so they come from
+  // the tenant config. A tenant that supplies none just gets the heading.
+  const { content, features } = useTenant();
+
   return (
     <div className="text-center py-10">
       <h2 className="font-serif text-2xl text-slate-800">
         How may I help you today?
       </h2>
       <p className="font-serif italic text-slate-500 mt-2 text-sm">
-        Ask a question by voice or text — or tap one of the prompts below.
+        {features.voice
+          ? "Ask a question by voice or text"
+          : "Ask a question"}
+        {content.suggestions.length > 0 && " — or tap one of the prompts below"}.
       </p>
       <div className="mt-8 flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
-        {SUGGESTIONS.map((s) => (
+        {content.suggestions.map((s: string) => (
           <button
             key={s}
             type="button"

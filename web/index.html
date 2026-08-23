@@ -3,15 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="IUL Agent — A multimodal RAG assistant for the Islamic University of Lebanon. Ask questions by voice or text." />
-    <link rel="icon" type="image/png" href="/haici_logo.png" />
+    <!--
+      Everything below is a neutral placeholder. The tenant config replaces the
+      title, description, favicon and font families at runtime — see
+      src/lib/branding/theme.ts. Nothing here names a client.
+    -->
+    <meta name="description" content="A multimodal assistant. Ask questions by voice or text." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- id is required: loadFonts() retargets this tag rather than stacking
+         another stylesheet on every rebrand. -->
     <link
+      id="tenant-fonts"
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
     />
-    <title>IUL Agent</title>
+    <title>AI Assistant</title>
   </head>
   <body class="bg-bg-base">
     <div id="root"></div>

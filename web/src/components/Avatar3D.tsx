@@ -12,12 +12,16 @@ interface Props {
   state: FaceState;
   amplitude?: number; // 0..1 RMS from the TTS analyser — drives the jaw
   emotion?: Emotion; // expression derived from the response
+  /** GLB to load. Supplied from the tenant config so each client can ship
+   *  their own character; falls back to the bundled head. */
+  modelUrl?: string;
 }
 
-// Swap the avatar without code changes: set VITE_AVATAR_URL to any GLB that
-// carries ARKit/Oculus blendshapes (e.g. a Ready Player Me avatar URL, or a
-// file dropped in /public/avatar/). Falls back to the bundled face-cap head.
-const MODEL_URL =
+// Any GLB carrying ARKit/Oculus blendshapes works (a Ready Player Me URL, or
+// a file dropped in /public/avatar/). The tenant config is the normal source;
+// VITE_AVATAR_URL remains as a build-time override for local development, and
+// the bundled face-cap head is the last resort.
+const FALLBACK_MODEL_URL =
   (import.meta.env.VITE_AVATAR_URL as string) || "/avatar/facecap.glb";
 
 // Logical blendshape -> candidate names across rig conventions
@@ -88,7 +92,7 @@ interface MorphEntry {
   index: number;
 }
 
-function Head({ state, amplitude, emotion }: Required<Props>) {
+function Head({ state, amplitude, emotion, modelUrl }: Required<Props>) {
   const gl = useThree((s) => s.gl);
   const groupRef = useRef<THREE.Group>(null);
   /** Maps logical name → array of {mesh, index} so we drive ALL meshes. */
@@ -107,7 +111,7 @@ function Head({ state, amplitude, emotion }: Required<Props>) {
 
     let alive = true;
     loader.load(
-      MODEL_URL,
+      modelUrl,
       (gltf) => {
         if (!alive) return;
         const root = gltf.scene;
@@ -162,7 +166,8 @@ function Head({ state, amplitude, emotion }: Required<Props>) {
       (err) => console.error("[Avatar3D] load failed", err),
     );
     return () => { alive = false; };
-  }, [gl]);
+    // Re-loads when the tenant swaps their avatar model.
+  }, [gl, modelUrl]);
 
   useFrame((_, dtRaw) => {
     const grp = groupRef.current;
@@ -260,7 +265,13 @@ function Head({ state, amplitude, emotion }: Required<Props>) {
   return <group ref={groupRef} visible={ready} />;
 }
 
-export default function Avatar3D({ state, amplitude = 0, emotion = "neutral" }: Props) {
+export default function Avatar3D({
+  state,
+  amplitude = 0,
+  emotion = "neutral",
+  modelUrl,
+}: Props) {
+  const url = modelUrl || FALLBACK_MODEL_URL;
   return (
     <div className="relative w-full h-full min-h-[150px] select-none">
       <Canvas
@@ -273,7 +284,7 @@ export default function Avatar3D({ state, amplitude = 0, emotion = "neutral" }: 
         <directionalLight position={[2.5, 2.5, 3]} intensity={1.35} color="#fff1de" />
         <directionalLight position={[-3, 0.5, 1.5]} intensity={0.3} color="#e8ddd2" />
         <directionalLight position={[-1, 1.5, -3]} intensity={0.6} color="#ffcf99" />
-        <Head state={state} amplitude={amplitude} emotion={emotion} />
+        <Head state={state} amplitude={amplitude} emotion={emotion} modelUrl={url} />
       </Canvas>
     </div>
   );
