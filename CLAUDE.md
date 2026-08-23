@@ -70,7 +70,19 @@ A Vite + React 18 + TypeScript + Tailwind app. Key shape:
 - **Response shape** (JSON): `{ answer, question?, audioBase64?, audioMime? }`. `question` is the Whisper transcript on voice turns and replaces the placeholder bubble in the UI. When `wantsAudio:true`, the workflow's Piper node fills `audioBase64`.
 - **The workflow must be Active.** `/webhook-test/rag-agent` only listens for one call per Listen click; subsequent calls succeed in n8n's execution history but the HTTP response never reaches the browser (it surfaces as `NetworkError when attempting to fetch resource`). Toggle the workflow Active in n8n and use `/webhook/rag-agent`.
 - **Sessions** are stored in `localStorage` only (see `web/src/lib/storage.ts`). No server-side persistence — clearing site data wipes them. The voice retry cache is in-memory only; reloading the page disables Retry on already-failed voice messages.
-- **Logos:** drop `logo-center.svg` and `logo-iul.svg` into `web/public/` and they'll be picked up via `VITE_LOGO_LEFT` / `VITE_LOGO_RIGHT`. Without them the header renders serif-monogram placeholders.
+- **Branding is runtime config, not code.** Nothing in `web/src` names a client. See § White-labelling below.
+
+## White-labelling
+
+The frontend is sold to different businesses, so every visual detail is data rather than source. There is one tenant document — `branding/branding.json`, bind-mounted to `/app/branding` in the `web` container — covering identity (name, kicker, tagline, logos, favicon, footer credit), theme (brand/neutral/warn/surface colours, light or dark, fonts, corner radius), avatar (3D model, still image, or none), feature switches (voice, avatar, landing, admin, sidebar) and the brand-bound copy (input placeholder, starter prompts).
+
+- **Edited from the UI.** `#/admin` → Branding tab. Changes preview live against the running app and only hit disk on Save. Non-technical staff never touch a file or trigger a rebuild.
+- **Served by the Bun sidecar.** `web/ws-server.ts` handles `GET/PUT /api/branding` plus asset upload at `/api/branding/asset/<slot>`; Vite proxies `/api/*` to it so the browser stays same-origin, exactly as it does for `/webhook`. Set `ADMIN_PASSCODE` in `docker-compose.yml` — without it, branding writes are unauthenticated.
+- **Theming works by redefining Tailwind's scales.** `tailwind.config.js` points `teal`→brand, `slate`→neutral and `amber`→warn at CSS variables, and `src/lib/branding/theme.ts` writes those variables from the config. An existing `bg-teal-600` therefore retargets itself with no rebuild and no edit — which is why ~140 colour utilities did not have to be rewritten. Full tint/shade ramps are generated from a single hex (`branding/color.ts`), and dark mode is the neutral ramp inverted, so no `dark:` variants exist anywhere.
+- **Prefer the semantic names in new code:** `bg-brand-600`, `text-neutral-500`, `bg-surface`, `text-on-brand`, `text-warn-700`. Never write a raw hex or `bg-white` in a component — it will not follow the tenant's theme. Charts are the one exception: Recharts emits colours as SVG attributes where `var()` never resolves, so they read computed values via `chartColors()` in `components/admin/ui.tsx`.
+- **Do not add `transition: all`.** Chrome will not re-resolve a transitioning property when the custom property behind it changes, leaving elements stuck on the previous tenant's colours. Enumerate the properties instead; `theme.ts` also freezes transitions across a theme swap.
+- Config resolves before the first React render (`main.tsx`), so components read it synchronously via `useTenant()` — there is no loading state. A missing or malformed file degrades to neutral defaults rather than a blank screen.
+- Browser storage keys are tenant-scoped through `lib/branding/scope.ts`, so two tenants can share an origin without reading each other's conversations.
 
 ## Domain context
 
