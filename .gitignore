@@ -3,7 +3,25 @@ ollama_data/
 piper_data/
 qdrant_data/
 whisper_data/
+redis_data/
+postgres_data/
 web/node_modules/
 web/dist/
 *.mp3
 *.webm
+.env
+__pycache__/
+
+# Branding assets uploaded through the admin UI are per-deployment binaries.
+# The branding.json beside them stays tracked as the reference tenant.
+branding/assets/
+
+# Workflow snapshots taken before risky edits. The live n8n instance is the
+# source of truth; these are local scratch, not history.
+*_backup.json
+*_backup_*.json
+*.bak-*
+
+# Build artifacts and local run output.
+*.tsbuildinfo
+logs.csv

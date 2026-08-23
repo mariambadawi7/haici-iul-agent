@@ -4,7 +4,7 @@ services:
     container_name: n8n
     restart: always
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment:
       - GENERIC_TIMEZONE=Asia/Beirut
       - TZ=Asia/Beirut
@@ -26,6 +26,42 @@ services:
     depends_on:
       - qdrant
       - whisper
+      - redis
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - ./redis_data:/data
+    # Cached TTS audio averages ~0.55MB per entry, so 3gb holds roughly 5,500 spoken
+    # answers. Sized to hold one full TTL period (30 days) even at admission-season
+    # traffic (~180 new entries/day), so entries age out on the TTL rather than being
+    # evicted early. Entries are keyed by exact normalized question text with no
+    # semantic matching, so paraphrases of the same question each take their own slot.
+    # Kept under the ~6GB free in the Docker VM: Redis needs headroom above maxmemory
+    # for allocator fragmentation and the AOF rewrite fork.
+    # allkeys-lru means a full cache drops the least-used entry instead of erroring.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "3gb", "--maxmemory-policy", "allkeys-lru", "--requirepass", "${REDIS_PASSWORD}"]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: always
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres_init:/docker-entrypoint-initdb.d
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -57,10 +93,18 @@ services:
       - "3001:3001"
     environment:
       - VITE_N8N_WEBHOOK_URL=/webhook/rag-agent
-      - VITE_APP_TITLE=IUL Agent
       - CHOKIDAR_USEPOLLING=true
+      # Where the Bun sidecar reads/writes the tenant branding document.
+      - BRANDING_FILE=/app/branding/branding.json
+      # Required to save branding from the admin UI. Leave unset only for
+      # local development — an unset value means anyone who can reach the
+      # container can rebrand the kiosk.
+      - ADMIN_PASSCODE=${ADMIN_PASSCODE:-}
     volumes:
       - ./web:/app
       - /app/node_modules
+      # Tenant branding lives outside the source tree so a client's logos and
+      # colours survive image rebuilds and never get committed.
+      - ./branding:/app/branding
     depends_on:
       - n8n
