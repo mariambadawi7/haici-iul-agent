@@ -3,48 +3,82 @@
 @tailwind utilities;
 
 @layer base {
+  /**
+   * Pre-JS fallback palette.
+   *
+   * `applyTheme()` overwrites every one of these on <html> before React first
+   * renders, so in practice they are only visible for the instant between the
+   * stylesheet parsing and the bootstrap running. The values below reproduce
+   * the stock light theme, which is also what a tenant gets if scripting is
+   * somehow blocked entirely.
+   */
   :root {
     color-scheme: light;
-    --bg-base: #f8fafc;
-    --bg-surface: rgba(255, 255, 255, 0.95);
-    --bg-panel: rgba(255, 255, 255, 0.97);
-    --bg-panel-strong: rgba(248, 250, 252, 0.98);
-    --bg-border: rgba(148, 163, 184, 0.28);
-    --accent: #0f766e;
-    --accent-cyan: #14b8a6;
-    --accent-violet: #6d28d9;
-    --accent-pink: #ec4899;
-    --text-main: #0f172a;
-    --text-muted: #475569;
-    --shadow-soft: 0 24px 80px rgba(15, 23, 42, 0.12);
+
+    --brand-50: 240 253 250;
+    --brand-100: 204 251 241;
+    --brand-200: 153 246 228;
+    --brand-300: 94 234 212;
+    --brand-400: 45 212 191;
+    --brand-500: 20 184 166;
+    --brand-600: 13 148 136;
+    --brand-700: 15 118 110;
+    --brand-800: 17 94 89;
+    --brand-900: 19 78 74;
+    --brand-950: 4 47 46;
+
+    --neutral-50: 248 250 252;
+    --neutral-100: 241 245 249;
+    --neutral-200: 226 232 240;
+    --neutral-300: 203 213 225;
+    --neutral-400: 148 163 184;
+    --neutral-500: 100 116 139;
+    --neutral-600: 71 85 105;
+    --neutral-700: 51 65 85;
+    --neutral-800: 30 41 59;
+    --neutral-900: 15 23 42;
+    --neutral-950: 2 6 23;
+
+    --warn-50: 255 251 235;
+    --warn-100: 254 243 199;
+    --warn-200: 253 230 138;
+    --warn-300: 252 211 77;
+    --warn-400: 251 191 36;
+    --warn-500: 245 158 11;
+    --warn-600: 217 119 6;
+    --warn-700: 180 83 9;
+    --warn-800: 146 64 14;
+    --warn-900: 120 53 15;
+    --warn-950: 69 26 3;
+
+    --surface: 255 255 255;
+    --surface-raised: 255 255 255;
+    --on-brand: 255 255 255;
+
+    --radius: 1rem;
+    --font-sans: "Inter";
+    --font-serif: "Cormorant Garamond";
+
+    --shadow-soft: 0 24px 80px rgb(var(--neutral-900) / 0.12);
   }
 
   html,
   body,
   #root {
     min-height: 100%;
-    background: radial-gradient(circle at 90% 10%, rgba(14, 165, 233, 0.10), transparent 20%),
-      radial-gradient(circle at 15% 20%, rgba(109, 52, 190, 0.08), transparent 18%),
-      linear-gradient(180deg, #fcfdff 0%, #f8fafc 40%, #eef2ff 100%);
-    color: var(--text-main);
+    background: linear-gradient(
+      180deg,
+      rgb(var(--surface)) 0%,
+      rgb(var(--neutral-50)) 45%,
+      rgb(var(--neutral-100)) 100%
+    );
+    color: rgb(var(--neutral-900));
   }
 
   body {
     @apply antialiased font-sans overflow-x-hidden;
     background-attachment: fixed;
     overflow-x: hidden;
-  }
-
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(120deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(60deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 24px 24px;
-    opacity: 0.22;
-    pointer-events: none;
   }
 
   h1,
@@ -57,8 +91,8 @@
   }
 
   ::selection {
-    background: rgba(82, 213, 255, 0.28);
-    color: #ffffff;
+    background: rgb(var(--brand-400) / 0.28);
+    color: rgb(var(--neutral-900));
   }
 
   ::-webkit-scrollbar {
@@ -67,72 +101,81 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgb(var(--neutral-100) / 0.4);
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(82, 213, 255, 0.18);
+    background: rgb(var(--brand-400) / 0.35);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(82, 213, 255, 0.32);
+    background: rgb(var(--brand-500) / 0.55);
   }
 }
 
 @layer components {
   .panel {
-    @apply bg-white/90 backdrop-blur-xl border border-slate-200/70;
+    @apply bg-surface/90 backdrop-blur-xl border border-neutral-200/70;
     box-shadow: var(--shadow-soft);
   }
 
   .panel-elevated {
-    @apply backdrop-blur-2xl border border-slate-200/70;
-    background-color: rgba(255, 255, 255, 0.94);
-    box-shadow: 0 28px 90px rgba(15, 23, 42, 0.12);
+    @apply backdrop-blur-2xl border border-neutral-200/70 bg-surface/95;
+    box-shadow: 0 28px 90px rgb(var(--neutral-900) / 0.12);
   }
 
+  /* Kept under the historical name so existing markup is untouched; the hue
+     now follows the tenant's brand colour rather than being literally gold. */
   .divider-gold {
-    background: linear-gradient(90deg, transparent, rgba(82, 213, 255, 0.38), transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--brand-400) / 0.38),
+      transparent
+    );
     @apply h-px;
   }
 
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 font-medium tracking-wide transition-all duration-200 ease-out
-      focus:outline-none focus:ring-2 focus:ring-cyan-400/40 disabled:opacity-50 disabled:cursor-not-allowed;
+      focus:outline-none focus:ring-2 focus:ring-brand-400/40 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn text-slate-950 bg-teal-400 hover:bg-teal-300 shadow-[0_18px_60px_-28px_rgba(20,184,166,0.5)];
+    @apply btn text-on-brand bg-brand-600 hover:bg-brand-500;
+    box-shadow: 0 18px 60px -28px rgb(var(--brand-500) / 0.5);
   }
 
   .btn-ghost {
-    @apply btn text-slate-700 hover:bg-slate-100 border border-slate-200/70;
+    @apply btn text-neutral-700 hover:bg-neutral-100 border border-neutral-200/70;
   }
 
   .btn-icon {
-    @apply inline-flex items-center justify-center w-12 h-12 rounded-2xl text-slate-700 border border-slate-200/70 hover:border-slate-300/80 hover:bg-slate-100 transition-all;
+    @apply inline-flex items-center justify-center w-12 h-12 rounded-2xl text-neutral-700 border border-neutral-200/70 hover:border-neutral-300/80 hover:bg-neutral-100 transition-all;
   }
 
   .input {
-    @apply w-full rounded-2xl px-4 py-3 text-slate-900 bg-slate-50 border border-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-teal-300/60 focus:ring-2 focus:ring-teal-300/20 transition-all;
+    @apply w-full rounded-2xl px-4 py-3 text-neutral-900 bg-neutral-50 border border-neutral-200 placeholder:text-neutral-400 focus:outline-none focus:border-brand-300/60 focus:ring-2 focus:ring-brand-300/20 transition-all;
   }
 
   .chip {
-    @apply text-xs uppercase tracking-[0.25em] px-3 py-2 rounded-full border border-slate-200/70 bg-slate-100/90 text-slate-700 hover:border-teal-300/70 hover:text-teal-700 transition;
+    @apply text-xs uppercase tracking-[0.25em] px-3 py-2 rounded-full border border-neutral-200/70 bg-neutral-100/90 text-neutral-700 hover:border-brand-300/70 hover:text-brand-700 transition;
   }
 
   .badge-serif {
-    @apply font-serif italic text-slate-500 text-[11px] uppercase tracking-[0.42em];
+    @apply font-serif italic text-neutral-500 text-[11px] uppercase tracking-[0.42em];
     letter-spacing: 0.2em;
   }
 
   .app-shell {
-    background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 15%),
-      radial-gradient(circle at bottom left, rgba(109, 52, 190, 0.05), transparent 18%),
-      linear-gradient(180deg, rgba(249, 250, 251, 0.92), rgba(255, 255, 255, 0.98));
+    background: linear-gradient(
+      180deg,
+      rgb(var(--neutral-50) / 0.92),
+      rgb(var(--surface) / 0.98)
+    );
   }
 
   .brand-strip {
@@ -145,16 +188,20 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 30% 20%, rgba(82, 213, 255, 0.08), transparent 22%),
-      radial-gradient(circle at 80% 80%, rgba(139, 109, 255, 0.05), transparent 20%);
+    background: radial-gradient(
+        circle at 30% 20%,
+        rgb(var(--brand-400) / 0.08),
+        transparent 22%
+      ),
+      radial-gradient(circle at 80% 80%, rgb(var(--brand-600) / 0.05), transparent 20%);
     pointer-events: none;
   }
 
-.brand-row {
+  .brand-row {
     @apply relative grid gap-4 items-center;
     grid-template-columns: auto 1fr auto;
   }
-  
+
   .brand-icon-wrap {
     @apply relative overflow-hidden;
     background: transparent;
@@ -175,15 +222,19 @@
   }
 
   .brand-label {
-    @apply text-xs uppercase tracking-[0.45em] text-slate-500 mb-2;
+    @apply text-xs uppercase tracking-[0.45em] text-neutral-500 mb-2;
   }
 
   .brand-heading {
-    @apply text-2xl md:text-3xl font-semibold text-slate-950 leading-tight;
+    @apply text-2xl md:text-3xl font-semibold text-neutral-900 leading-tight;
   }
 
   .brand-subtitle {
-    @apply mt-2 text-sm text-slate-500 max-w-2xl;
+    @apply mt-2 text-sm text-neutral-500 max-w-2xl;
+  }
+
+  .footer-credit {
+    @apply shrink-0 text-center text-[11px] uppercase tracking-[0.3em] text-neutral-400 py-2;
   }
 
   .dashboard-grid {
@@ -201,25 +252,28 @@
   }
 
   .main-panel {
-    @apply flex flex-col rounded-2xl md:rounded-[28px] overflow-hidden border border-slate-200/80 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.08)];
-    background: rgba(255, 255, 255, 0.98);
+    @apply flex flex-col rounded-2xl md:rounded-3xl overflow-hidden border border-neutral-200/80 bg-surface;
+    box-shadow: 0 20px 50px -30px rgb(var(--neutral-900) / 0.18);
     width: 100%;
     height: 100%;
   }
 
   .alert-bar {
     @apply px-4 py-3 text-xs text-center tracking-wide rounded-b-3xl;
-    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    border-top: 1px solid rgb(var(--neutral-400) / 0.16);
   }
 
   .alert-error {
-    @apply text-red-200 bg-red-500/10 border-red-500/20;
+    @apply text-red-700 bg-red-500/10 border-red-500/20;
   }
 
   .alert-warning {
-    @apply text-amber-200 bg-amber-500/10 border-amber-500/20;
+    @apply text-warn-700 bg-warn-500/10 border-warn-500/20;
   }
 
+  /* Enumerated rather than `all`: a blanket transition also covers properties
+     resolved from theme variables, which Chrome then refuses to re-resolve
+     when those variables change (see withoutTransitions in branding/theme.ts). */
   .panel,
   .panel-elevated,
   .btn,
@@ -228,7 +282,12 @@
   .btn-icon,
   .input,
   .chip {
-    transition: all 180ms ease;
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
   }
 
   .animated-entry {
@@ -250,26 +309,9 @@
     animation: pulse-glow 1.75s ease-in-out infinite;
   }
 
-  .text-ink-100 { color: #0f172a !important; }
-  .text-ink-300 { color: #64748b !important; }
-  .text-ink-500 { color: #475569 !important; }
-  .text-accent { color: #0f766e !important; }
-  .text-accent-glow { color: #0f766e !important; }
-  .bg-bg-panel\/40 { background-color: rgba(255, 255, 255, 0.4) !important; }
-  .bg-bg-panel\/85 { background-color: rgba(255, 255, 255, 0.85) !important; }
-  .bg-bg-elevated\/60 { background-color: rgba(248, 250, 252, 0.6) !important; }
-  .bg-bg-elevated\/85 { background-color: rgba(248, 250, 252, 0.85) !important; }
-  .border-bg-border { border-color: rgba(148, 163, 184, 0.28) !important; }
-  .border-bg-border\/20 { border-color: rgba(148, 163, 184, 0.2) !important; }
-  .bg-accent\/10 { background-color: rgba(14, 165, 233, 0.08) !important; }
-  .border-accent\/25 { border-color: rgba(14, 165, 233, 0.25) !important; }
-  .border-accent\/40 { border-color: rgba(14, 165, 233, 0.4) !important; }
-  .from-accent\/30 { --tw-gradient-from: rgba(14, 165, 233, 0.3) !important; }
-  .to-accent-deep\/40 { --tw-gradient-to: rgba(14, 165, 233, 0.4) !important; }
-  .bg-white\/5 { background-color: rgba(255, 255, 255, 0.05) !important; }
-
   @keyframes pulse-glow {
-    0%, 100% {
+    0%,
+    100% {
       opacity: 0.55;
       transform: scale(1);
     }

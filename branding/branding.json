@@ -1,0 +1,45 @@
+{
+  "id": "iul",
+  "identity": {
+    "name": "IUL Agent",
+    "kicker": "IUL • HAICI",
+    "tagline": "Premium robot assistant design for intelligent campus guidance.",
+    "logoPrimary": "/iul_logo.png",
+    "logoSecondary": "/haici_logo.png",
+    "favicon": "/haici_logo.png",
+    "footerCredit": "Powered by KAILYRA x HAICI x Syntropy x  Mimizzz x Barmajino",
+    "metaDescription": "IUL Agent — A multimodal RAG assistant for the Islamic University of Lebanon. Ask questions by voice or text."
+  },
+  "theme": {
+    "brand": "#0d9488",
+    "neutral": "#475569",
+    "warn": "#d97706",
+    "surface": "#ffffff",
+    "mode": "light",
+    "fontSans": "Inter",
+    "fontSerif": "Cormorant Garamond",
+    "radius": "1rem"
+  },
+  "avatar": {
+    "kind": "glb",
+    "glbUrl": "/avatar/facecap.glb",
+    "imageUrl": "/mascot_avatar.png"
+  },
+  "features": {
+    "voice": true,
+    "avatar": true,
+    "landing": true,
+    "admin": true,
+    "sidebar": true
+  },
+  "content": {
+    "inputPlaceholder": "Ask anything about IUL — or tap the mic to speak",
+    "suggestions": [
+      "Tell me about the faculties of IUL",
+      "Where are IUL's campuses located?",
+      "What is IUL's history and founding vision?",
+      "Which accreditations does IUL hold?",
+      "How do I apply to IUL?"
+    ]
+  }
+}
