@@ -23,11 +23,25 @@ CREATE INDEX IF NOT EXISTS idx_rsl_qhash      ON receptionist_session_logs (ques
 CREATE INDEX IF NOT EXISTS idx_rsl_session    ON receptionist_session_logs (session_id);
 CREATE INDEX IF NOT EXISTS idx_rsl_unknown    ON receptionist_session_logs (is_unknown) WHERE is_unknown;
 
--- Generic key/value store for admin settings. The admin dashboard passcode is
--- stored here as a SHA-256 hash (key 'admin_passcode_sha256') — never the
--- plaintext, and never committed via this file. Seed it manually after a
--- fresh volume init, e.g.:
---   INSERT INTO admin_settings (key, value) VALUES ('admin_passcode_sha256', '<sha256-hex>');
+-- Generic key/value store for admin settings. The dashboard has TWO passcodes,
+-- each stored as a SHA-256 hash — never the plaintext, and never committed via
+-- this file. The workflow's "Resolve Role" node matches the supplied passcode
+-- against both and returns 'operator', 'client' or '' (401):
+--
+--   operator_passcode_sha256  full console: analytics + lexicon + branding
+--   client_passcode_sha256    analytics only; lexicon/corrections return 403
+--
+-- Seed both manually after a fresh volume init, e.g.:
+--   INSERT INTO admin_settings (key, value) VALUES ('operator_passcode_sha256', '<sha256-hex>');
+--   INSERT INTO admin_settings (key, value) VALUES ('client_passcode_sha256',   '<sha256-hex>');
+--
+-- The operator passcode must ALSO be set as OPERATOR_PASSCODE in the web
+-- container (docker-compose.yml reads it from ADMIN_DASHBOARD_PASSCODE), because
+-- the Branding tab forwards it to the Bun sidecar, which gates writes on it.
+-- Without it the sidecar refuses branding writes with a 503.
+--
+-- Superseded: 'admin_passcode_sha256' was the single pre-split passcode. Nothing
+-- reads it any more.
 CREATE TABLE IF NOT EXISTS admin_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL

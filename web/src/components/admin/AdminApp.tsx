@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { BarChart3, BookMarked, LogOut, Palette, ShieldCheck } from "lucide-react";
+import {
+  BarChart3,
+  BookMarked,
+  Building2,
+  LogOut,
+  Palette,
+  ShieldCheck,
+} from "lucide-react";
 import PasscodeGate from "./PasscodeGate";
 import KpiCards from "./KpiCards";
 import UnknownQuestions from "./UnknownQuestions";
@@ -18,6 +25,7 @@ import {
   liveAdminClient,
   AdminAuthError,
   type AdminClient,
+  type AdminRole,
   type OverviewResponse,
   type RangeOption,
 } from "../../lib/adminApi";
@@ -37,12 +45,37 @@ function readMockScenario(): "full" | "empty" | null {
   return mock === "empty" ? "empty" : "full";
 }
 
+/** Fixture-only role override, e.g. `#/admin?mock=full&role=client`, so the
+ *  client dashboard can be previewed without a client passcode. Ignored on
+ *  the production path — there the role comes from the server. */
+function readMockRole(): AdminRole {
+  const hash = window.location.hash;
+  const qIndex = hash.indexOf("?");
+  if (qIndex === -1) return "operator";
+  const role = new URLSearchParams(hash.slice(qIndex + 1)).get("role");
+  return role === "client" ? "client" : "operator";
+}
+
 type Tab = "analytics" | "lexicon" | "branding";
+
+/** Which tabs each role may see. The server enforces the same split — this
+ *  only decides what gets drawn. */
+const TABS_BY_ROLE: Record<AdminRole, Tab[]> = {
+  operator: ["analytics", "lexicon", "branding"],
+  client: ["analytics"],
+};
+
+const TAB_META: Record<Tab, { label: string; icon: ReactNode }> = {
+  analytics: { label: "Analytics", icon: <BarChart3 className="w-3.5 h-3.5" /> },
+  lexicon: { label: "Lexicon", icon: <BookMarked className="w-3.5 h-3.5" /> },
+  branding: { label: "Branding", icon: <Palette className="w-3.5 h-3.5" /> },
+};
 
 export default function AdminApp() {
   const { identity } = useTenant();
   const [tab, setTab] = useState<Tab>("analytics");
   const mockScenario = useMemo(readMockScenario, []);
+  const mockRole = useMemo(readMockRole, []);
   const [client, setClient] = useState<AdminClient | null>(
     mockScenario ? null : liveAdminClient,
   );
@@ -51,12 +84,12 @@ export default function AdminApp() {
     if (!mockScenario) return;
     let cancelled = false;
     import("../../lib/adminMock").then(({ createMockAdminClient }) => {
-      if (!cancelled) setClient(createMockAdminClient(mockScenario));
+      if (!cancelled) setClient(createMockAdminClient(mockScenario, mockRole));
     });
     return () => {
       cancelled = true;
     };
-  }, [mockScenario]);
+  }, [mockScenario, mockRole]);
 
   const [passcode, setPasscode] = useState<string | null>(() =>
     sessionStorage.getItem(STORAGE_KEY),
@@ -173,37 +206,40 @@ export default function AdminApp() {
     return <PasscodeGate onSubmit={handleGateSubmit} mock={!!mockScenario} />;
   }
 
+  // A backend predating the role split omits `role`; treat that as the old
+  // single dashboard rather than silently downgrading the operator.
+  const role: AdminRole = overview?.role ?? "operator";
+  const visibleTabs = TABS_BY_ROLE[role];
+  // Derived rather than corrected-by-effect, so a role change can never leave
+  // an operator-only tab rendered for a frame.
+  const activeTab: Tab = visibleTabs.includes(tab) ? tab : "analytics";
+
   return (
     <div className="min-h-screen w-full app-shell bg-slate-50">
       <header className="panel-elevated border-b border-bg-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
           <div>
-            <div className="badge-serif">Admin</div>
+            <div className="badge-serif">
+              {role === "operator" ? "Operator console" : "Analytics"}
+            </div>
             <h1 className="font-serif text-xl text-slate-900 leading-tight">
               {identity.name}
             </h1>
           </div>
 
-          <nav className="hidden md:inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
-            <TabButton
-              active={tab === "analytics"}
-              onClick={() => setTab("analytics")}
-              icon={<BarChart3 className="w-3.5 h-3.5" />}
-              label="Analytics"
-            />
-            <TabButton
-              active={tab === "lexicon"}
-              onClick={() => setTab("lexicon")}
-              icon={<BookMarked className="w-3.5 h-3.5" />}
-              label="Lexicon"
-            />
-            <TabButton
-              active={tab === "branding"}
-              onClick={() => setTab("branding")}
-              icon={<Palette className="w-3.5 h-3.5" />}
-              label="Branding"
-            />
-          </nav>
+          {visibleTabs.length > 1 && (
+            <nav className="hidden md:inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+              {visibleTabs.map((t) => (
+                <TabButton
+                  key={t}
+                  active={activeTab === t}
+                  onClick={() => setTab(t)}
+                  icon={TAB_META[t].icon}
+                  label={TAB_META[t].label}
+                />
+              ))}
+            </nav>
+          )}
           <div className="flex items-center gap-3">
             {mockScenario && (
               <span className="text-[10px] uppercase tracking-[0.2em] text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
@@ -211,8 +247,12 @@ export default function AdminApp() {
               </span>
             )}
             <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-slate-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
-              Authenticated
+              {role === "operator" ? (
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
+              ) : (
+                <Building2 className="w-3.5 h-3.5 text-teal-500" />
+              )}
+              {role === "operator" ? "Operator" : "Analytics only"}
             </span>
             <button
               type="button"
@@ -228,33 +268,26 @@ export default function AdminApp() {
 
       {/* The switcher collapses to a full-width row on narrow screens, where
           the header has no space for it. */}
-      <div className="md:hidden max-w-7xl mx-auto px-4 pt-4">
-        <nav className="inline-flex w-full rounded-xl border border-slate-200 bg-slate-50 p-0.5">
-          <TabButton
-            active={tab === "analytics"}
-            onClick={() => setTab("analytics")}
-            icon={<BarChart3 className="w-3.5 h-3.5" />}
-            label="Analytics"
-          />
-          <TabButton
-            active={tab === "lexicon"}
-            onClick={() => setTab("lexicon")}
-            icon={<BookMarked className="w-3.5 h-3.5" />}
-            label="Lexicon"
-          />
-          <TabButton
-            active={tab === "branding"}
-            onClick={() => setTab("branding")}
-            icon={<Palette className="w-3.5 h-3.5" />}
-            label="Branding"
-          />
-        </nav>
-      </div>
+      {visibleTabs.length > 1 && (
+        <div className="md:hidden max-w-7xl mx-auto px-4 pt-4">
+          <nav className="inline-flex w-full rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+            {visibleTabs.map((t) => (
+              <TabButton
+                key={t}
+                active={activeTab === t}
+                onClick={() => setTab(t)}
+                icon={TAB_META[t].icon}
+                label={TAB_META[t].label}
+              />
+            ))}
+          </nav>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-5 md:space-y-6">
-        {tab === "branding" ? (
+        {activeTab === "branding" ? (
           <BrandingTab passcode={passcode} />
-        ) : tab === "lexicon" ? (
+        ) : activeTab === "lexicon" ? (
           <LexiconEditor client={client} passcode={passcode!} />
         ) : overviewError ? (
           <ErrorState
@@ -303,7 +336,7 @@ export default function AdminApp() {
           </>
         )}
 
-        {tab === "analytics" && (
+        {activeTab === "analytics" && (
           <QuestionLog client={client} passcode={passcode!} />
         )}
       </main>
@@ -330,7 +363,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all ${
+      className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors ${
         active
           ? "bg-surface text-teal-700 shadow-sm border border-slate-200"
           : "text-slate-500 hover:text-slate-700"

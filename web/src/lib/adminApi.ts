@@ -17,6 +17,11 @@
 
 export type RangeOption = "7d" | "30d" | "90d" | "all";
 
+/** Who is holding the passcode. Resolved server-side by the workflow's
+ *  `Resolve Role` node — never asserted by the browser. `operator` gets the
+ *  full console; `client` gets analytics only. */
+export type AdminRole = "operator" | "client";
+
 export type LogFilter =
   | "all"
   | "unknown"
@@ -125,6 +130,9 @@ export interface OverviewResponse {
   byLanguage: LanguageBucket[];
   byInputType: InputTypeBucket[];
   byMatchType: MatchTypeBucket[];
+  /** Optional so a backend predating the role split still parses — the UI
+   *  treats a missing role as `operator`, i.e. the old single dashboard. */
+  role?: AdminRole;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +247,16 @@ export class AdminAuthError extends AdminApiError {
   }
 }
 
+/** Thrown on a 403 — the passcode is valid but lacks the role for this view
+ *  (e.g. a client passcode asking for the lexicon). Distinct from a 401 so the
+ *  UI shows "not allowed" rather than kicking back to the passcode gate. */
+export class AdminForbiddenError extends AdminApiError {
+  constructor(message = "Your passcode does not allow this.") {
+    super(message, 403);
+    this.name = "AdminForbiddenError";
+  }
+}
+
 /** Thrown specifically on a 400 from `view: "lexiconSave"` — the server's
  *  `Validate Lexicon` node names the offending term in `message`, so this
  *  is kept distinct from a generic `AdminApiError` for inline display. */
@@ -304,6 +322,16 @@ async function postAdminStats<T>(
 
   if (res.status === 401) {
     throw new AdminAuthError();
+  }
+  if (res.status === 403) {
+    let message = "Your passcode does not allow this.";
+    try {
+      const body = await res.json();
+      if (body && typeof body.message === "string") message = body.message;
+    } catch {
+      // fall through with the generic message
+    }
+    throw new AdminForbiddenError(message);
   }
   if (res.status === 404) {
     throw new AdminApiError(

@@ -25,3 +25,6 @@ branding/assets/
 # Build artifacts and local run output.
 *.tsbuildinfo
 logs.csv
+
+# Live n8n workflow snapshots taken before edits. Runtime state, not history.
+.workflow-backups/

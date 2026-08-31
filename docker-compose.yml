@@ -99,7 +99,10 @@ services:
       # Required to save branding from the admin UI. Leave unset only for
       # local development — an unset value means anyone who can reach the
       # container can rebrand the kiosk.
-      - ADMIN_PASSCODE=${ADMIN_PASSCODE:-}
+      # Operator passcode gates branding writes on the Bun sidecar. Must be the
+      # same secret whose sha256 is stored as admin_settings.operator_passcode_sha256,
+      # because the operator console forwards the passcode it authenticated with.
+      - OPERATOR_PASSCODE=${ADMIN_DASHBOARD_PASSCODE:-}
     volumes:
       - ./web:/app
       - /app/node_modules

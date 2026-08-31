@@ -15,6 +15,7 @@
  */
 import type {
   AdminClient,
+  AdminRole,
   CorrectionsResponse,
   DayBucket,
   HourBucket,
@@ -28,7 +29,11 @@ import type {
   UnknownQuestion,
   WeekdayBucket,
 } from "./adminApi";
-import { AdminAuthError, AdminValidationError } from "./adminApi";
+import {
+  AdminAuthError,
+  AdminForbiddenError,
+  AdminValidationError,
+} from "./adminApi";
 
 const WEEKDAY_LABELS = [
   "Sunday",
@@ -475,12 +480,25 @@ function assertPasscode(passcode: string) {
   if (!passcode.trim() || passcode === "wrong") throw new AdminAuthError();
 }
 
-export function createMockAdminClient(scenario: MockScenario): AdminClient {
+export function createMockAdminClient(
+  scenario: MockScenario,
+  role: AdminRole = "operator",
+): AdminClient {
+  /** Mirrors the workflow's 403: a client passcode cannot reach these. */
+  function assertOperator() {
+    if (role !== "operator") {
+      throw new AdminForbiddenError(
+        "This dashboard is analytics-only. Ask an operator for lexicon or branding changes.",
+      );
+    }
+  }
   return {
     async fetchOverview(passcode, range) {
       assertPasscode(passcode);
       await new Promise((r) => setTimeout(r, 250));
-      return scenario === "empty" ? buildEmptyOverview() : buildFullOverview(range);
+      const base =
+        scenario === "empty" ? buildEmptyOverview() : buildFullOverview(range);
+      return { ...base, role };
     },
     async fetchLog(passcode, query) {
       assertPasscode(passcode);
@@ -489,11 +507,13 @@ export function createMockAdminClient(scenario: MockScenario): AdminClient {
     },
     async fetchLexicon(passcode) {
       assertPasscode(passcode);
+      assertOperator();
       await new Promise((r) => setTimeout(r, 200));
       return mockLexicon;
     },
     async saveLexicon(passcode, lexicon) {
       assertPasscode(passcode);
+      assertOperator();
       await new Promise((r) => setTimeout(r, 200));
       const err = validateMockLexicon(lexicon);
       if (err) throw new AdminValidationError(err);
@@ -502,6 +522,7 @@ export function createMockAdminClient(scenario: MockScenario): AdminClient {
     },
     async fetchCorrections(passcode) {
       assertPasscode(passcode);
+      assertOperator();
       await new Promise((r) => setTimeout(r, 200));
       return scenario === "empty" ? { topPairs: [], clarifications: [] } : buildCorrections();
     },

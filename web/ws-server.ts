@@ -33,12 +33,34 @@ const BRANDING_FILE = process.env.BRANDING_FILE ?? "/app/branding/branding.json"
 /**
  * Shared secret for writes. When set, a PUT must present it as
  * `X-Admin-Passcode` — the admin dashboard already holds the operator's
- * passcode, so it simply forwards the one the user typed. When unset, writes
- * are open; that is convenient for local development and logged loudly,
- * because on a networked kiosk it means anyone who can reach the port can
- * rebrand it.
+ * passcode, so it simply forwards the one the user typed. Branding is an
+ * operator capability: only the operator passcode opens it, never the
+ * analytics-only client one.
+ *
+ * Reads stay public — the kiosk fetches its own branding on every boot with
+ * no credential. Only writes are gated, and they FAIL CLOSED: with no
+ * passcode configured, writes are refused rather than waved through, so a
+ * misconfigured deployment is inert instead of silently world-writable.
  */
-const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE ?? "";
+const OPERATOR_PASSCODE =
+  process.env.OPERATOR_PASSCODE ?? process.env.ADMIN_PASSCODE ?? "";
+
+/** Guards every branding mutation. Returns null when the caller may proceed. */
+function requireOperator(req: Request): Response | null {
+  if (!OPERATOR_PASSCODE) {
+    return json(
+      {
+        error:
+          "Branding writes are disabled: no operator passcode is configured on the server.",
+      },
+      503,
+    );
+  }
+  if (req.headers.get("X-Admin-Passcode") !== OPERATOR_PASSCODE) {
+    return json({ error: "Invalid or missing operator passcode." }, 401);
+  }
+  return null;
+}
 
 /** Refuse absurd payloads outright rather than filling the disk. */
 const MAX_CONFIG_BYTES = 256 * 1024;
@@ -95,9 +117,8 @@ async function readBranding(): Promise<Response> {
 }
 
 async function writeBranding(req: Request): Promise<Response> {
-  if (ADMIN_PASSCODE && req.headers.get("X-Admin-Passcode") !== ADMIN_PASSCODE) {
-    return json({ error: "Invalid or missing admin passcode." }, 401);
-  }
+  const denied = requireOperator(req);
+  if (denied) return denied;
 
   const raw = await req.text();
   if (raw.length > MAX_CONFIG_BYTES) {
@@ -132,9 +153,8 @@ async function writeBranding(req: Request): Promise<Response> {
  * the resulting URL is what the branding config then points at.
  */
 async function uploadAsset(req: Request, slot: string): Promise<Response> {
-  if (ADMIN_PASSCODE && req.headers.get("X-Admin-Passcode") !== ADMIN_PASSCODE) {
-    return json({ error: "Invalid or missing admin passcode." }, 401);
-  }
+  const denied = requireOperator(req);
+  if (denied) return denied;
   if (!ASSET_SLOTS.has(slot)) {
     return json({ error: `Unknown asset slot "${slot}".` }, 400);
   }
@@ -237,9 +257,11 @@ const server = Bun.serve<WsData>({
 console.log(`[ws] relay listening on :${server.port}`);
 console.log(`[branding] config file: ${BRANDING_FILE}`);
 console.log(`[branding] asset dir:   ${ASSET_DIR}`);
-if (!ADMIN_PASSCODE) {
+if (!OPERATOR_PASSCODE) {
   console.warn(
-    "[branding] ADMIN_PASSCODE is not set — branding writes are UNAUTHENTICATED. " +
-      "Set it in docker-compose.yml before exposing this host to a network.",
+    "[branding] OPERATOR_PASSCODE is not set — branding writes are DISABLED (503). " +
+      "Set it in docker-compose.yml to enable the operator console's Branding tab.",
   );
+} else {
+  console.log("[branding] writes require the operator passcode");
 }
