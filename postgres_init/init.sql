@@ -15,7 +15,13 @@ CREATE TABLE IF NOT EXISTS receptionist_session_logs (
     intent TEXT,
     language TEXT,
     raw_question TEXT,
-    corrections JSONB
+    corrections JSONB,
+    -- TRUE when the semantic tier could not run (embedding or Qdrant lookup
+    -- failed) and the turn fell through to a full RAG answer; FALSE when it ran
+    -- normally; NULL when it was never reached (tier-1 cache hit). Without this
+    -- a failed embedding is indistinguishable from "nothing similar found",
+    -- since both are logged as match_type 'fresh'.
+    semantic_skipped BOOLEAN
 );
 
 CREATE INDEX IF NOT EXISTS idx_rsl_timestamp  ON receptionist_session_logs (timestamp DESC);

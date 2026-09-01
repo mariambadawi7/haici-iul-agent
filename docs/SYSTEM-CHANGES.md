@@ -123,7 +123,8 @@ Three outcomes are recorded distinctly in the log as `match_type`:
 
 Columns: `id, timestamp, input_type, question, answer, responded_with_audio,
 match_type, answer_hash, session_id, question_hash, normalized_question,
-latency_ms, is_unknown, intent, language, raw_question, corrections (JSONB)`.
+latency_ms, is_unknown, intent, language, raw_question, corrections (JSONB),
+semantic_skipped`.
 
 Indexes: `timestamp DESC`, `question_hash`, `session_id`, and a *partial* index
 on `is_unknown WHERE is_unknown` — the unknown-questions view is the most-run
@@ -919,12 +920,42 @@ Two honest limits on this fix:
   a bad one under sustained quota exhaustion — if that is ever observed in real
   traffic, drop `maxTries` to 2 or accept the degradation.
 
-Still open: the condition remains invisible in the logs. A failed embedding is
-recorded as an ordinary `fresh`, so a distinct `match_type` (or a
-`semanticSkipped` flag on the log row) is still worth adding before hit-rate
-figures are quoted with confidence. `Judge Same Question` calls the same Gemini
-API with the same `continueRegularOutput` fallback and has no retry — it is the
-next candidate if quota errors show up there too.
+**The condition is now visible: `semantic_skipped`.** A failed embedding used to
+be recorded as an ordinary `fresh`, indistinguishable from "the semantic tier
+ran and found nothing similar". `Semantic Lookup` now reports which of the two
+happened, `Anonymize Log Entry` forwards it, and it is stored on the log row as
+a **nullable** boolean — the three states are genuinely different and collapsing
+them would defeat the point:
+
+| value | meaning |
+|---|---|
+| `false` | the semantic tier ran; nothing cleared the bar, or the judge said `DIFFERENT` |
+| `true` | the tier could not run — `semanticSkipReason` is `embedding_unavailable` or `lookup_failed` |
+| `NULL` | never reached: a tier-1 cache hit answered first |
+
+Verified across all three on live traffic — and the very first test run caught a
+real one:
+
+| row | `match_type` | `semantic_skipped` | latency |
+|---|---|---|---|
+| fresh, tier ran | `fresh` | `f` | 6,873 ms |
+| tier-1 hit | `cache_hit` | `NULL` | 54 ms |
+| **quota error** | `fresh` | **`t`** | 29,813 ms |
+
+The last row is the failure this whole thread was about, now legible instead of
+hiding inside `fresh`: `semanticSkipReason: 'embedding_unavailable'`, and the
+~30 s reflects the new retry waiting ~10 s before giving up and falling through.
+
+Note the schema change is additive and nullable, so it cannot break existing
+rows. The admin API selects `*` from this table, so the field reaches the client,
+but `QuestionLog` renders a fixed column set (Time / Question / Type / Match /
+Latency) and simply ignores it — no dashboard change was needed. Surfacing it
+there is a small follow-up if the operator view should show degraded turns.
+
+Still open: `Judge Same Question` calls the same Gemini API with the same
+`continueRegularOutput` fallback and has no retry — it is the next candidate if
+quota errors show up there too. A judge failure currently reads as
+`isSame: false`, i.e. an ordinary cache miss, with no equivalent flag.
 
 ---
 
