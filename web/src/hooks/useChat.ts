@@ -232,7 +232,7 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
         
         let reply: ChatReply;
         if (payload.kind === "text") {
-          reply = await sendChat(sessionId, payload.text, askMainForAudio, ctl.signal, visitor);
+          reply = await sendChat(sessionId, payload.text, askMainForAudio, ctl.signal, visitor, "text");
         } else {
           updateMessage(sessionId, userMessageId, {
             content: "🎙️ (Transcribing...)",
@@ -251,7 +251,9 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
             errorMessage: undefined,
           });
           
-          reply = await sendChat(sessionId, transcript, askMainForAudio, ctl.signal, visitor);
+          // Mark the turn as spoken: the workflow can no longer infer it, since
+          // the transcript reaches it as ordinary text.
+          reply = await sendChat(sessionId, transcript, askMainForAudio, ctl.signal, visitor, "audio");
           reply.question = transcript;
         }
 

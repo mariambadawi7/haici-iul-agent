@@ -150,12 +150,25 @@ export interface Visitor {
 }
 
 /**
+ * Where a turn's text came from. Speech reaches the agent already transcribed
+ * (see `transcribeAudio`), so by the time it arrives it is indistinguishable
+ * from typing unless the client says otherwise — and the workflow's typo
+ * correction wants the difference: a typed near-miss is a slip of the fingers
+ * and is auto-corrected, while a misheard one may be a genuinely different
+ * word and is worth a clarifying question.
+ */
+export type InputType = "text" | "audio";
+
+/**
  * Send a text turn to the n8n RAG workflow.
  * Body shape matches `Set userText (Text)` in the workflow: `body.text`.
  * `wantsAudio` lets the workflow skip Piper when the user has TTS muted.
  *
  * `visitor` is omitted entirely when the camera is off or has nobody, so the
  * workflow can treat its presence as "the kiosk can see someone right now".
+ *
+ * `inputType` defaults to `"text"`, which is both the safe reading of a caller
+ * that does not say and what the workflow assumes when the field is absent.
  */
 export async function sendChat(
   sessionId: string,
@@ -163,8 +176,9 @@ export async function sendChat(
   wantsAudio: boolean,
   signal?: AbortSignal,
   visitor?: Visitor | null,
+  inputType: InputType = "text",
 ): Promise<ChatReply> {
-  const payload: Record<string, unknown> = { sessionId, text, wantsAudio };
+  const payload: Record<string, unknown> = { sessionId, text, wantsAudio, inputType };
   if (visitor && (visitor.name || visitor.emotion)) payload.visitor = visitor;
 
   console.log("Sending chat to:", config.chatUrl, payload);
@@ -239,32 +253,14 @@ export function audioFileName(blob: Blob): string {
 }
 
 /**
- * Send a recorded audio blob to the workflow as multipart/form-data.
- * n8n's Webhook node exposes the first binary file as `$binary.data0`,
- * which the Switch routes through `Local Whisper (STT)` — so the UI
- * never talks to Whisper or Piper directly.
- */
-export async function sendChatAudio(
-  sessionId: string,
-  blob: Blob,
-  wantsAudio: boolean,
-  signal?: AbortSignal,
-): Promise<ChatReply> {
-  const form = new FormData();
-  form.append("file", blob, audioFileName(blob));
-  form.append("sessionId", sessionId);
-  form.append("wantsAudio", String(wantsAudio));
-  const res = await fetchWithTimeout(config.chatUrl, {
-    method: "POST",
-    body: form,
-    signal,
-  });
-  return readReply(res);
-}
-
-/**
- * Transcribe the audio via the n8n STT webhook (Gemini under the hood).
- * The browser only ever talks to n8n — the Gemini key stays server-side.
+ * Transcribe the audio via the n8n STT webhook (Groq Whisper under the hood).
+ * The browser only ever talks to n8n — the Groq key stays server-side.
+ *
+ * This is the only way audio enters the system. The Agent Workflow used to
+ * carry its own audio branch, reached by a `sendChatAudio()` helper posting a
+ * blob to `config.chatUrl`; nothing ever called it, and that branch had no
+ * language fencing, so both were removed. Speech is transcribed here first and
+ * then sent on as ordinary text via `sendChat()`.
  */
 export async function transcribeAudio(
   blob: Blob,
