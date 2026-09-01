@@ -862,10 +862,45 @@ Acceptance test, run twice, all passing:
 A name-bearing answer does still sit under the recognised visitor's *private*
 key. That is the design working, and the stranger case proves it is unreachable.
 
-**Load-bearing, not cosmetic:** sharing is safe *because* ordinary answers carry
-no name. If a later prompt change lets the agent address people by name again,
-those answers will be shared with strangers. The table above is the regression
-guard.
+**Hardened: the agent is no longer told the name unless it needs it.**
+Sharing was safe only *because* ordinary answers carried no name — and that
+rested on the model obeying a prompt instruction. `visitorContext` was appended
+to every agent call, so a future prompt edit or a model drift would have put
+names back into shared answers silently, cached for 30 days, served to
+strangers. No error, no log line.
+
+The camera line is now supplied **only for identity questions**. The agent
+cannot leak a name it was never given, which turns an instruction into a
+structural guarantee. The prompt was rewritten to match the new contract —
+previously it said an absent camera line meant "you cannot see anyone", which
+would now be a lie on every ordinary turn.
+
+Because that same `PERSONAL` regex now gates the agent's access to the name, its
+failure modes became asymmetric and it was widened accordingly:
+
+| | consequence |
+|---|---|
+| over-matching | a shareable answer gets a private key — costs one cache hit |
+| under-matching | the kiosk tells someone it can plainly see "I don't recognise you" — costs trust |
+
+So it now also covers "remember me", "have we met", "who do you think I am",
+"what do you know about me" and the Arabic equivalents (`تتذكرني`, `تعرف عني` …).
+
+Verified across phrasings, both languages, both directions:
+
+| asked by | question | result |
+|---|---|---|
+| recognised visitor | "Who am I?" / "Do you know me?" / "Do you remember me?" / "What's my name?" / "Have we met before?" | named correctly |
+| recognised visitor | `من أنا؟` / `هل تتذكرني؟` / `ما اسمي؟` | named correctly (the agent transliterates, `مريم بدوي`) |
+| recognised visitor | ordinary questions | no name, answer shareable |
+| **stranger** | the same ordinary question | 2.1 s cache hit, no name |
+| **stranger** | every identity phrasing above, EN and AR | "I don't recognise you" |
+
+Worth noting for the report: the first run of this test reported two Arabic
+failures that were not failures. The assertion looked for the Latin string
+"mariam" while the agent had answered `أنت مريم بدوي` — the test was wrong, not
+the system. A checker that only understands one script will quietly mis-grade a
+bilingual deployment.
 
 ### Arabic punctuation was inside the tokeniser's "word" class
 
