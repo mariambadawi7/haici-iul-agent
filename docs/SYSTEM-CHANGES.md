@@ -946,11 +946,17 @@ The last row is the failure this whole thread was about, now legible instead of
 hiding inside `fresh`: `semanticSkipReason: 'embedding_unavailable'`, and the
 ~30 s reflects the new retry waiting ~10 s before giving up and falling through.
 
-Note the schema change is additive and nullable, so it cannot break existing
-rows. The admin API selects `*` from this table, so the field reaches the client,
-but `QuestionLog` renders a fixed column set (Time / Question / Type / Match /
-Latency) and simply ignores it — no dashboard change was needed. Surfacing it
-there is a small follow-up if the operator view should show degraded turns.
+The schema change is additive and nullable, so it cannot break existing rows.
+
+**Surfaced in the dashboard.** `Log Query` uses `SELECT *` only inside its CTEs;
+the rows it actually returns come from an explicit `json_build_object`, so a new
+column reaches the client only when named there — adding it to the table was not
+enough. The projection now carries `semanticSkipped`, `LogRow` types it as
+`boolean | null`, and `QuestionLog` marks a degraded turn with a red **degraded**
+badge beside the match type, explained on hover. It is deliberately shown only
+when the value is exactly `true`: a plain `fresh` is a genuine miss and gets no
+marker, which keeps the badge rare enough to mean something. The flag is also
+added to the page CSV export so it survives into offline analysis.
 
 **`Judge Same Question` now gets the same treatment.** It calls the same Gemini
 API behind the same `continueRegularOutput` fallback, so it had the identical

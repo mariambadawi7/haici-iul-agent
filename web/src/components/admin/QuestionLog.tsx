@@ -93,6 +93,7 @@ export default function QuestionLog({ client, passcode }: Props) {
         "latencyMs",
         "sessionId",
         "respondedWithAudio",
+        "semanticSkipped",
       ],
     );
     downloadCsv(`qa-log-page-${page}.csv`, csv);
@@ -201,9 +202,21 @@ export default function QuestionLog({ client, passcode }: Props) {
                         </Badge>
                       </td>
                       <td className="px-2 py-2.5">
-                        <Badge tone={r.matchType === "cache_hit" ? "teal" : "slate"}>
-                          {r.matchType}
-                        </Badge>
+                        <span className="inline-flex items-center gap-1">
+                          <Badge tone={r.matchType === "cache_hit" ? "teal" : "slate"}>
+                            {r.matchType}
+                          </Badge>
+                          {/* Only shown when the tier actually broke. A plain
+                              `fresh` is a genuine miss and gets no marker, so
+                              this stays rare enough to mean something. */}
+                          {r.semanticSkipped === true && (
+                            <Badge tone="red">
+                              <span title="The semantic cache tier could not finish (embedding, lookup or judge failure), so this turn paid for a full answer it may not have needed.">
+                                degraded
+                              </span>
+                            </Badge>
+                          )}
+                        </span>
                       </td>
                       <td className="px-2 py-2.5 text-slate-500 text-xs tabular-nums">
                         {formatMs(r.latencyMs)}

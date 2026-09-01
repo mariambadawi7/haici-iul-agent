@@ -290,7 +290,7 @@
       "parameters": {
         "resource": "database",
         "operation": "executeQuery",
-        "query": "WITH filtered AS (\n  SELECT *\n  FROM receptionist_session_logs\n  WHERE\n    ($1 = '' OR question ILIKE '%' || $1 || '%' OR answer ILIKE '%' || $1 || '%')\n    AND (\n      $2 = 'all'\n      OR ($2 = 'unknown' AND is_unknown)\n      OR ($2 = 'voice' AND input_type = 'audio')\n      OR ($2 = 'text' AND input_type = 'text')\n      OR ($2 = 'cache_hit' AND match_type = 'cache_hit')\n      OR ($2 = 'fresh' AND match_type = 'fresh')\n    )\n),\ntotal_count AS (\n  SELECT count(*) AS total FROM filtered\n),\npage_rows AS (\n  SELECT * FROM filtered ORDER BY timestamp DESC, id DESC\n  LIMIT $3::int OFFSET $4::int\n)\nSELECT json_build_object(\n  'rows', COALESCE((SELECT json_agg(json_build_object(\n      'id', id, 'timestamp', timestamp, 'question', question, 'answer', answer,\n      'inputType', input_type, 'matchType', match_type, 'isUnknown', COALESCE(is_unknown, false),\n      'intent', intent, 'language', language, 'latencyMs', latency_ms,\n      'sessionId', session_id, 'respondedWithAudio', responded_with_audio\n    ) ORDER BY timestamp DESC, id DESC) FROM page_rows), '[]'::json),\n  'total', (SELECT total FROM total_count),\n  'page', $5::int,\n  'pageSize', $3::int\n) AS result;",
+        "query": "WITH filtered AS (\n  SELECT *\n  FROM receptionist_session_logs\n  WHERE\n    ($1 = '' OR question ILIKE '%' || $1 || '%' OR answer ILIKE '%' || $1 || '%')\n    AND (\n      $2 = 'all'\n      OR ($2 = 'unknown' AND is_unknown)\n      OR ($2 = 'voice' AND input_type = 'audio')\n      OR ($2 = 'text' AND input_type = 'text')\n      OR ($2 = 'cache_hit' AND match_type = 'cache_hit')\n      OR ($2 = 'fresh' AND match_type = 'fresh')\n    )\n),\ntotal_count AS (\n  SELECT count(*) AS total FROM filtered\n),\npage_rows AS (\n  SELECT * FROM filtered ORDER BY timestamp DESC, id DESC\n  LIMIT $3::int OFFSET $4::int\n)\nSELECT json_build_object(\n  'rows', COALESCE((SELECT json_agg(json_build_object(\n      'id', id, 'timestamp', timestamp, 'question', question, 'answer', answer,\n      'inputType', input_type, 'matchType', match_type, 'isUnknown', COALESCE(is_unknown, false),\n      'intent', intent, 'language', language, 'latencyMs', latency_ms,\n      'sessionId', session_id, 'respondedWithAudio', responded_with_audio,\n      'semanticSkipped', semantic_skipped\n    ) ORDER BY timestamp DESC, id DESC) FROM page_rows), '[]'::json),\n  'total', (SELECT total FROM total_count),\n  'page', $5::int,\n  'pageSize', $3::int\n) AS result;",
         "options": {
           "queryReplacement": "={{ [$json.search, $json.filterVal, $json.pageSize, $json.offset, $json.page] }}"
         }
@@ -1033,5 +1033,5 @@
   "pinData": {},
   "meta": {},
   "id": "9UwU0payk3rht1ms",
-  "versionId": "0e668926-030d-4a5f-9c7b-2d9938ec7fbd"
+  "versionId": "9610ad50-4f57-415e-b990-8758d3b7b62e"
 }

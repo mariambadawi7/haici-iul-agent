@@ -152,6 +152,16 @@ export interface LogRow {
   latencyMs: number | null;
   sessionId: string | null;
   respondedWithAudio: boolean;
+  /**
+   * Whether the semantic cache tier could finish. Nullable on purpose — the
+   * three states mean different things, and collapsing them is exactly what
+   * made an embedding outage invisible in the first place:
+   *   false → the tier ran; nothing matched, or the judge said DIFFERENT
+   *   true  → the tier could not finish (embedding, Qdrant or judge failure),
+   *           so this turn paid for a full RAG call it might not have needed
+   *   null  → never reached; a tier-1 cache hit answered first
+   */
+  semanticSkipped: boolean | null;
 }
 
 export interface LogResponse {

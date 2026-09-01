@@ -219,6 +219,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: 1820,
       sessionId: "sess-a1b2c3",
       respondedWithAudio: false,
+      semanticSkipped: false,
     },
     {
       id: 16,
@@ -233,6 +234,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: 640,
       sessionId: "sess-a1b2c3",
       respondedWithAudio: false,
+      semanticSkipped: false,
     },
     {
       id: 15,
@@ -247,6 +249,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: 2380,
       sessionId: "sess-d4e5f6",
       respondedWithAudio: true,
+      semanticSkipped: true,
     },
     {
       id: 14,
@@ -262,6 +265,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: 310,
       sessionId: "sess-d4e5f6",
       respondedWithAudio: false,
+      semanticSkipped: null,
     },
     {
       id: 13,
@@ -276,6 +280,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: null,
       sessionId: "sess-g7h8i9",
       respondedWithAudio: false,
+      semanticSkipped: null,
     },
     // Historical rows — new columns are NULL, as they would be pre-migration.
     {
@@ -291,6 +296,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: null,
       sessionId: null,
       respondedWithAudio: false,
+      semanticSkipped: false,
     },
     {
       id: 4,
@@ -305,6 +311,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: null,
       sessionId: null,
       respondedWithAudio: false,
+      semanticSkipped: false,
     },
     {
       id: 3,
@@ -319,6 +326,7 @@ function buildFullLog(query: LogQuery): LogResponse {
       latencyMs: null,
       sessionId: null,
       respondedWithAudio: false,
+      semanticSkipped: false,
     },
   ];
 
