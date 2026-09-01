@@ -94,6 +94,13 @@ services:
     environment:
       - VITE_N8N_WEBHOOK_URL=/webhook/rag-agent
       - CHOKIDAR_USEPOLLING=true
+      # Serve the kiosk over HTTPS with a self-signed cert. Required for any
+      # device that is not this machine: the camera and the microphone both
+      # need a secure context, and http://<LAN IP> is not one. Off by default
+      # because on the kiosk PC itself http://localhost already counts as
+      # secure and needs no certificate to be trusted.
+      #   VITE_HTTPS=1 docker compose up -d web
+      - VITE_HTTPS=${VITE_HTTPS:-}
       # Where the Bun sidecar reads/writes the tenant branding document.
       - BRANDING_FILE=/app/branding/branding.json
       # Required to save branding from the admin UI. Leave unset only for
@@ -111,3 +118,16 @@ services:
       - ./branding:/app/branding
     depends_on:
       - n8n
+    networks:
+      - default
+      # Shared with the OpenCam compose project so Vite can proxy /opencam to
+      # `opencam-backend:8080`. Without this the vision backend is reachable
+      # only on the Windows loopback, which a container cannot dial.
+      - vision
+
+networks:
+  # Created out of band (`docker network create haici-vision`) and shared with
+  # the OpenCam project, so neither compose file owns it.
+  vision:
+    name: haici-vision
+    external: true

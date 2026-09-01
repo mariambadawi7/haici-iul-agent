@@ -4,6 +4,14 @@ import type { FaceState } from "../types";
 export interface HardwareOpts {
   faceState: FaceState;
   onNewSession: () => void;
+  /**
+   * The ultrasonic sensor saw something. Deliberately separate from
+   * `onNewSession`: the red button is a person deciding to start, and is
+   * obeyed immediately, whereas a sensor pulse is evidence to be weighed
+   * against the camera (see usePresence). Falls back to onNewSession when no
+   * handler is supplied, which is the pre-fusion behaviour.
+   */
+  onPresence?: () => void;
   onStartRecord: () => void;
   onStopRecord: () => void;
   onStopSpeaking: () => void;
@@ -12,6 +20,7 @@ export interface HardwareOpts {
 export function useHardware({
   faceState,
   onNewSession,
+  onPresence,
   onStartRecord,
   onStopRecord,
   onStopSpeaking,
@@ -21,20 +30,25 @@ export function useHardware({
   faceRef.current = faceState;
 
   // Stable refs so the reconnect loop never needs callbacks in its dep array
-  const cbRef = useRef({ onNewSession, onStartRecord, onStopRecord, onStopSpeaking });
-  cbRef.current = { onNewSession, onStartRecord, onStopRecord, onStopSpeaking };
+  const cbRef = useRef({ onNewSession, onPresence, onStartRecord, onStopRecord, onStopSpeaking });
+  cbRef.current = { onNewSession, onPresence, onStartRecord, onStopRecord, onStopSpeaking };
 
   useEffect(() => {
-    // Connect DIRECTLY to the Bun.serve relay on port 3001 — not through the
-    // Vite dev-server proxy, which does not reliably forward WS frames for a
-    // custom backend. On the kiosk machine the page is served over
-    // http://localhost:5173 (a secure context, so the mic still works), so a
-    // plain ws:// connection to the relay has no mixed-content/cert friction.
+    // Same-origin, through the Vite proxy (see the /hw-ws entry in
+    // vite.config.ts). This used to dial the relay directly on port 3001, which
+    // works only while the page is plain http on the kiosk machine itself: on
+    // an HTTPS page — which a tablet requires, or getUserMedia refuses the mic —
+    // the protocol below becomes wss: and the relay, which serves no TLS,
+    // refuses it. Every hardware trigger (ultrasonic presence and all three
+    // buttons) went silent with no visible error but the reconnect loop.
+    //
+    // Going through the page's own origin means the relay inherits the page's
+    // certificate and there is nothing separate for a tablet to trust.
     // Override with VITE_HW_WS_URL if the relay lives on another host.
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url =
       import.meta.env.VITE_HW_WS_URL ||
-      `${proto}//${location.hostname}:3001/ws?client=browser`;
+      `${proto}//${location.host}/hw-ws?client=browser`;
     let alive = true;
 
     function connect() {
@@ -57,8 +71,12 @@ export function useHardware({
         const cb = cbRef.current;
         switch (msg.type) {
           case "new_session":
-          case "presence_detected":
+            // A person pressed the button. No sensor fusion applies to an
+            // explicit request — obey it immediately.
             cb.onNewSession();
+            break;
+          case "presence_detected":
+            (cb.onPresence ?? cb.onNewSession)();
             break;
           case "start_record":
             cb.onStartRecord();

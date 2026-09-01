@@ -24,7 +24,12 @@ import { Panel } from "./ui";
 import { useBranding } from "../../lib/branding/context";
 import { DEFAULT_CONFIG } from "../../lib/branding/defaults";
 import { saveBranding, uploadAsset, type AssetSlot } from "../../lib/branding/store";
-import type { AvatarKind, TenantConfig, ThemeMode } from "../../lib/branding/types";
+import type {
+  AvatarKind,
+  MascotView,
+  TenantConfig,
+  ThemeMode,
+} from "../../lib/branding/types";
 
 interface Props {
   /** Forwarded to the config service, which may require it for writes. */
@@ -279,11 +284,29 @@ export default function BrandingTab({ passcode }: Props) {
             value={config.avatar.kind}
             onChange={(e) => set("avatar", { kind: e.target.value as AvatarKind })}
           >
+            <option value="mascot">Animated 2D mascot</option>
             <option value="glb">Animated 3D model</option>
             <option value="image">Still image</option>
             <option value="none">No avatar</option>
           </select>
         </Field>
+        {config.avatar.kind === "mascot" && (
+          <Field
+            label="Mascot framing"
+            hint="Full body reads as a character; head-and-shoulders makes the expression and lip-sync far easier to see on a small panel."
+          >
+            <select
+              className="input"
+              value={config.avatar.mascotView}
+              onChange={(e) =>
+                set("avatar", { mascotView: e.target.value as MascotView })
+              }
+            >
+              <option value="full">Full body</option>
+              <option value="head">Head only</option>
+            </select>
+          </Field>
+        )}
         <AssetField
           label="3D model (.glb)"
           hint="Needs ARKit or Oculus blendshapes for lip-sync. A Ready Player Me export works."
@@ -350,6 +373,12 @@ export default function BrandingTab({ passcode }: Props) {
           label="Conversation history rail"
           checked={config.features.sidebar}
           onChange={(sidebar) => set("features", { sidebar })}
+        />
+        <Toggle
+          label="Camera vision"
+          checked={config.features.camera}
+          onChange={(camera) => set("features", { camera })}
+          warning="Uses the kiosk camera to notice visitors, recognise faces and read documents. Needs the vision backend running, and it points a camera at the public — check that against the site's policy before enabling."
         />
         <Toggle
           label="Analytics dashboard"

@@ -35,6 +35,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
     kind: "glb",
     glbUrl: "/avatar/facecap.glb",
     imageUrl: "",
+    mascotView: "full",
   },
   features: {
     voice: true,
@@ -42,6 +43,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
     landing: true,
     admin: true,
     sidebar: true,
+    camera: false,
   },
   content: {
     inputPlaceholder: "Ask anything — or tap the mic to speak",

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="3200" viewBox="0 0 2000 3200">
+<defs>
+    <linearGradient id="shellGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBFCFF"/>
+      <stop offset="0.68" stop-color="#FBFCFF"/>
+      <stop offset="1" stop-color="#E7EBF4"/>
+    </linearGradient>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#122552"/>
+      <stop offset="1" stop-color="#04102E"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#28CFEF"/>
+      <stop offset="0.48" stop-color="#2676D8"/>
+      <stop offset="1" stop-color="#205AAF"/>
+    </linearGradient>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="13" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .outline{stroke:#050F2B;stroke-width:18;stroke-linecap:round;stroke-linejoin:round}
+      .thin{stroke:#050F2B;stroke-width:12;stroke-linecap:round;stroke-linejoin:round}
+      .cyan-stroke{stroke:#28CFEF;stroke-width:44;stroke-linecap:round;stroke-linejoin:round;fill:none}
+      .guide{display:none;fill:#FF5A6A;stroke:none}
+    </style>
+  </defs>
+  <!-- 01_Shadows -->
+  <ellipse cx="1000" cy="3060" rx="520" ry="72" fill="#BCC6DA" opacity=".38"/>
+  <!-- 02_Left_Leg -->
+  <g id="left_leg"><circle cx="800" cy="2020" r="105" fill="url(#navyGrad)" class="outline"/><path d="M 800 2020 L 790 2360" stroke="#050F2B" stroke-width="212" stroke-linecap="round" fill="none"/>
+  <path d="M 800 2020 L 790 2360" stroke="url(#navyGrad)" stroke-width="188" stroke-linecap="round" fill="none"/><circle cx="790" cy="2360" r="92" fill="#2676D8" class="outline"/><path d="M 790 2360 L 770 2750" stroke="#050F2B" stroke-width="254" stroke-linecap="round" fill="none"/>
+  <path d="M 790 2360 L 770 2750" stroke="url(#shellGrad)" stroke-width="230" stroke-linecap="round" fill="none"/><circle cx="770" cy="2750" r="80" fill="#122552" class="outline"/><g transform="translate(770 2940) rotate(0) scale(-1 1)">
+    <path d="M -145 -200 Q -70 -260 45 -220 Q 125 -190 148 -65 L 156 90 Q 160 155 95 165 H -130 Q -175 160 -172 112 L -160 -80 Q -160 -150 -145 -200 Z" fill="url(#shellGrad)" stroke="#050F2B" stroke-width="18"/>
+    <path d="M -166 92 Q -22 48 154 88 V 135 Q 146 170 94 172 H -130 Q -174 166 -174 125 Z" fill="#04102E" stroke="#050F2B" stroke-width="14"/>
+    <path d="M 88 78 Q 120 62 150 86" stroke="#28CFEF" stroke-width="18" fill="none"/>
+  </g></g>
+  <!-- 03_Right_Leg -->
+  <g id="right_leg"><circle cx="1200" cy="2020" r="105" fill="url(#navyGrad)" class="outline"/><path d="M 1200 2020 L 1210 2360" stroke="#050F2B" stroke-width="212" stroke-linecap="round" fill="none"/>
+  <path d="M 1200 2020 L 1210 2360" stroke="url(#navyGrad)" stroke-width="188" stroke-linecap="round" fill="none"/><circle cx="1210" cy="2360" r="92" fill="#2676D8" class="outline"/><path d="M 1210 2360 L 1230 2750" stroke="#050F2B" stroke-width="254" stroke-linecap="round" fill="none"/>
+  <path d="M 1210 2360 L 1230 2750" stroke="url(#shellGrad)" stroke-width="230" stroke-linecap="round" fill="none"/><circle cx="1230" cy="2750" r="80" fill="#122552" class="outline"/><g transform="translate(1230 2940) rotate(0) scale(1 1)">
+    <path d="M -145 -200 Q -70 -260 45 -220 Q 125 -190 148 -65 L 156 90 Q 160 155 95 165 H -130 Q -175 160 -172 112 L -160 -80 Q -160 -150 -145 -200 Z" fill="url(#shellGrad)" stroke="#050F2B" stroke-width="18"/>
+    <path d="M -166 92 Q -22 48 154 88 V 135 Q 146 170 94 172 H -130 Q -174 166 -174 125 Z" fill="#04102E" stroke="#050F2B" stroke-width="14"/>
+    <path d="M 88 78 Q 120 62 150 86" stroke="#28CFEF" stroke-width="18" fill="none"/>
+  </g></g>
+  <!-- 04_Hip_Connector -->
+  <path d="M 770 1960 Q 1000 1885 1230 1960 L 1260 2075 Q 1000 2160 740 2075 Z" fill="url(#navyGrad)" class="outline"/>
+  <!-- 05_Left_Arm -->
+  <g id="left_arm"><circle cx="610" cy="1480" r="120" fill="url(#navyGrad)" class="outline"/><path d="M 552 1425 Q 610 1370 668 1425" stroke="#28CFEF" stroke-width="28" fill="none"/><path d="M 610 1490 L 485 1745" stroke="#050F2B" stroke-width="159" stroke-linecap="round" fill="none"/>
+  <path d="M 610 1490 L 485 1745" stroke="url(#navyGrad)" stroke-width="135" stroke-linecap="round" fill="none"/><circle cx="485" cy="1745" r="76" fill="#2676D8" class="outline"/><path d="M 485 1745 L 450 2015" stroke="#050F2B" stroke-width="182" stroke-linecap="round" fill="none"/>
+  <path d="M 485 1745 L 450 2015" stroke="url(#shellGrad)" stroke-width="158" stroke-linecap="round" fill="none"/><circle cx="450" cy="2015" r="66" fill="#122552" class="outline"/></g>
+  <!-- 06_Right_Arm -->
+  <g id="right_arm"><circle cx="1390" cy="1480" r="120" fill="url(#navyGrad)" class="outline"/><path d="M 1332 1425 Q 1390 1370 1448 1425" stroke="#28CFEF" stroke-width="28" fill="none"/><path d="M 1390 1490 L 1515 1745" stroke="#050F2B" stroke-width="159" stroke-linecap="round" fill="none"/>
+  <path d="M 1390 1490 L 1515 1745" stroke="url(#navyGrad)" stroke-width="135" stroke-linecap="round" fill="none"/><circle cx="1515" cy="1745" r="76" fill="#2676D8" class="outline"/><path d="M 1515 1745 L 1550 2015" stroke="#050F2B" stroke-width="182" stroke-linecap="round" fill="none"/>
+  <path d="M 1515 1745 L 1550 2015" stroke="url(#shellGrad)" stroke-width="158" stroke-linecap="round" fill="none"/><circle cx="1550" cy="2015" r="66" fill="#122552" class="outline"/></g>
+  <!-- 07_Torso -->
+  <path d="M 680 1370 Q 1000 1270 1320 1370 Q 1430 1560 1370 1910 Q 1300 2070 1000 2085 Q 700 2070 630 1910 Q 570 1560 680 1370 Z" fill="url(#shellGrad)" class="outline"/>
+    <path d="M 760 1455 Q 967 1365 1220 1447" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" fill="none" opacity="0.55"/>
+    <text x="1000" y="1605" text-anchor="middle" font-family="Arial Rounded MT Bold,Arial,sans-serif" font-size="126" font-weight="700" fill="#2676D8" letter-spacing="5">HAICI</text>
+    <g transform="translate(900 1660)" fill="none" stroke="#2676D8" stroke-width="22" stroke-linecap="round"><path d="M 0 30 V 170 M 200 30 V 170 M 0 100 H 200 M 100 100 V 205"/><circle cx="0" cy="20" r="18" fill="#FBFCFF"/><circle cx="200" cy="20" r="18" fill="#FBFCFF"/><circle cx="0" cy="180" r="18" fill="#FBFCFF"/><circle cx="200" cy="180" r="18" fill="#FBFCFF"/><circle cx="100" cy="215" r="18" fill="#FBFCFF"/></g>
+  <!-- 08_Neck -->
+  <ellipse cx="1000" cy="1325" rx="160" ry="92" fill="url(#navyGrad)" class="outline"/><path d="M 895 1312 Q 1000 1360 1105 1312" stroke="#2676D8" stroke-width="24" fill="none"/>
+  <!-- 09_Left_Hand -->
+  <g transform="translate(450 2120) rotate(0) scale(-1 1)"><path d="M -55 -50 Q -94 -25 -82 28 Q -72 68 -38 88 Q 0 112 40 88 Q 78 68 82 22 V -30 Q 78 -65 52 -66 Q 26 -66 22 -38 V -74 Q 20 -108 -10 -108 Q -40 -108 -42 -72 V -45 Q -50 -66 -72 -64 Q -90 -60 -92 -38" fill="url(#navyGrad)" stroke="#050F2B" stroke-width="14" stroke-linejoin="round"/></g>
+  <!-- 10_Right_Hand -->
+  <g transform="translate(1550 2120) rotate(0) scale(1 1)"><path d="M -55 -50 Q -94 -25 -82 28 Q -72 68 -38 88 Q 0 112 40 88 Q 78 68 82 22 V -30 Q 78 -65 52 -66 Q 26 -66 22 -38 V -74 Q 20 -108 -10 -108 Q -40 -108 -42 -72 V -45 Q -50 -66 -72 -64 Q -90 -60 -92 -38" fill="url(#navyGrad)" stroke="#050F2B" stroke-width="14" stroke-linejoin="round"/></g>
+</svg>

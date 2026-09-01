@@ -134,21 +134,44 @@ async function fetchWithTimeout(
 }
 
 /**
+ * What the camera currently believes about the person at the kiosk.
+ *
+ * Sent with every turn rather than only in the greeting, because identity
+ * resolves on its own schedule: the camera cannot know who someone is until it
+ * has seen a few frames, which is always after the conversation has started.
+ * A greeting that embeds the name answers "hello Mariam" once; this answers
+ * "who am I" at any point in the conversation.
+ */
+export interface Visitor {
+  /** Recognised identity, or null for a stranger / not yet resolved. */
+  name: string | null;
+  /** Smoothed expression, or null when the camera is not watching. */
+  emotion: string | null;
+}
+
+/**
  * Send a text turn to the n8n RAG workflow.
  * Body shape matches `Set userText (Text)` in the workflow: `body.text`.
  * `wantsAudio` lets the workflow skip Piper when the user has TTS muted.
+ *
+ * `visitor` is omitted entirely when the camera is off or has nobody, so the
+ * workflow can treat its presence as "the kiosk can see someone right now".
  */
 export async function sendChat(
   sessionId: string,
   text: string,
   wantsAudio: boolean,
   signal?: AbortSignal,
+  visitor?: Visitor | null,
 ): Promise<ChatReply> {
-  console.log("Sending chat to:", config.chatUrl, { sessionId, text, wantsAudio });
+  const payload: Record<string, unknown> = { sessionId, text, wantsAudio };
+  if (visitor && (visitor.name || visitor.emotion)) payload.visitor = visitor;
+
+  console.log("Sending chat to:", config.chatUrl, payload);
   const res = await fetchWithTimeout(config.chatUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, text, wantsAudio }),
+    body: JSON.stringify(payload),
     signal,
   });
   return readReply(res);
@@ -190,6 +213,32 @@ export async function fetchAudio(
 }
 
 /**
+ * Whisper picks its decoder from the multipart filename and content type, so the
+ * container we claim has to be the container we actually recorded. Safari records
+ * `audio/mp4`; claiming `.webm` for it makes the decoder read AAC as Opus, and
+ * Whisper then language-detects the resulting noise — which is why voice turns
+ * from an iPad came back transcribed into an apparently random language.
+ *
+ * Extensions are restricted to the set Groq accepts (flac, mp3, mp4, mpeg, mpga,
+ * m4a, ogg, wav, webm); anything unrecognised falls back to webm, which is what
+ * every non-Safari browser here records.
+ */
+const AUDIO_EXTENSIONS: Array<[RegExp, string]> = [
+  [/^(audio|video)\/webm$/, "webm"],
+  [/^(audio\/(mp4|m4a|x-m4a|aac)|video\/mp4)$/, "m4a"],
+  [/^audio\/(mpeg|mp3)$/, "mp3"],
+  [/^(audio|application)\/ogg$/, "ogg"],
+  [/^audio\/(wav|wave|x-wav|vnd\.wave)$/, "wav"],
+  [/^audio\/(flac|x-flac)$/, "flac"],
+];
+
+export function audioFileName(blob: Blob): string {
+  const base = (blob.type || "").split(";")[0].trim().toLowerCase();
+  const hit = AUDIO_EXTENSIONS.find(([re]) => re.test(base));
+  return `speech.${hit ? hit[1] : "webm"}`;
+}
+
+/**
  * Send a recorded audio blob to the workflow as multipart/form-data.
  * n8n's Webhook node exposes the first binary file as `$binary.data0`,
  * which the Switch routes through `Local Whisper (STT)` — so the UI
@@ -202,8 +251,7 @@ export async function sendChatAudio(
   signal?: AbortSignal,
 ): Promise<ChatReply> {
   const form = new FormData();
-  const ext = blob.type.includes("webm") ? "webm" : "wav";
-  form.append("file", blob, `speech.${ext}`);
+  form.append("file", blob, audioFileName(blob));
   form.append("sessionId", sessionId);
   form.append("wantsAudio", String(wantsAudio));
   const res = await fetchWithTimeout(config.chatUrl, {
@@ -223,8 +271,7 @@ export async function transcribeAudio(
   signal?: AbortSignal,
 ): Promise<string> {
   const form = new FormData();
-  const ext = blob.type.includes("webm") ? "webm" : "wav";
-  form.append("file", blob, `speech.${ext}`);
+  form.append("file", blob, audioFileName(blob));
 
   const res = await fetchWithTimeout("/webhook/stt", {
     method: "POST",
@@ -237,5 +284,9 @@ export async function transcribeAudio(
   }
   
   const data = await res.json();
+  // The workflow rejects a transcript whose detected language falls outside the
+  // tenant's set (see the "Guard Language" node) and reports why in `error`.
+  // Surface that instead of the generic "could not transcribe" from useChat.
+  if (data.error) throw new Error(data.error);
   return data.text || "";
 }

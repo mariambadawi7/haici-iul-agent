@@ -24,3 +24,9 @@ export interface Session {
 }
 
 export type FaceState = "idle" | "listening" | "thinking" | "speaking";
+
+/**
+ * Sentiment inferred from the assistant's latest answer. Drives the avatar's
+ * expression, whichever avatar the tenant is running.
+ */
+export type Emotion = "neutral" | "happy" | "sad" | "surprised";

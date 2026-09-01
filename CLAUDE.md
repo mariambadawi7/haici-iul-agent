@@ -61,7 +61,7 @@ A Vite + React 18 + TypeScript + Tailwind app. Key shape:
 - **`hooks/useChat.ts` is the single source of truth for chat state.** It owns sessions (persisted to `localStorage`), the active session id, pending state, the toast, and the retriability set. There is one in-flight `AbortController` — sending a new message cancels the previous one. The hook is the only place `dispatch()` lives.
 - **Retry survives reloads.** Text messages cache `originalText` on the message itself; voice recordings get stored in IndexedDB keyed by message id (`lib/audioStore.ts`). On boot, `useChat` hydrates the `retriable` Set from both sources, so the Retry button on a failed message works even after a page refresh.
 - **`ErrorBoundary` and `HealthBanner`.** `main.tsx` wraps `<App>` in `ErrorBoundary` so a render crash shows a recovery screen instead of a blank page. `App.tsx` runs `checkHealth()` on mount and shows an amber banner at the top whenever the n8n webhook is unreachable or the workflow is inactive.
-- **State machine for the animated face** lives in `web/src/App.tsx` and resolves a single `FaceState` (`idle | listening | thinking | speaking`) from the union of TTS/STT/pending booleans. The face (`web/src/components/AnimatedFace.tsx`) reads that one prop plus an `amplitude` 0..1 driven by a WebAudio AnalyserNode tap on the playback element — that's where the lip-sync comes from.
+- **State machine for the avatar** lives in `web/src/App.tsx` and resolves a single `FaceState` (`idle | listening | thinking | speaking`) from the union of TTS/STT/pending booleans. Whichever renderer is active (see § The avatar) reads that one prop plus an `amplitude` 0..1 driven by a WebAudio AnalyserNode tap on the playback element — that's where the lip-sync comes from. When TTS is off, `App.tsx` synthesises the envelope from the reply's length instead, so the mouth still moves on text-only turns.
 - **The frontend ONLY talks to the n8n webhook.** It does not call Whisper or Piper directly — the workflow handles STT and TTS internally and returns audio as `audioBase64`. The only env var that matters is `VITE_N8N_WEBHOOK_URL` (default `/webhook/rag-agent` — relative).
 - **CORS is sidestepped via a Vite reverse-proxy.** `web/vite.config.ts` proxies `/webhook/*` to `http://n8n:5678/webhook/*` over the Docker network. The browser only ever talks to `localhost:5173`, so the request is same-origin and CORS never gets a vote. If a turn fails with "Could not reach the workflow through the Vite proxy", the web container can't resolve `n8n:5678` — usually fixed by `docker compose up -d --force-recreate web`.
 - **Two request shapes** to the same webhook:
@@ -74,7 +74,7 @@ A Vite + React 18 + TypeScript + Tailwind app. Key shape:
 
 ## White-labelling
 
-The frontend is sold to different businesses, so every visual detail is data rather than source. There is one tenant document — `branding/branding.json`, bind-mounted to `/app/branding` in the `web` container — covering identity (name, kicker, tagline, logos, favicon, footer credit), theme (brand/neutral/warn/surface colours, light or dark, fonts, corner radius), avatar (3D model, still image, or none), feature switches (voice, avatar, landing, admin, sidebar) and the brand-bound copy (input placeholder, starter prompts).
+The frontend is sold to different businesses, so every visual detail is data rather than source. There is one tenant document — `branding/branding.json`, bind-mounted to `/app/branding` in the `web` container — covering identity (name, kicker, tagline, logos, favicon, footer credit), theme (brand/neutral/warn/surface colours, light or dark, fonts, corner radius), avatar (2D mascot, 3D model, still image, or none), feature switches (voice, avatar, landing, admin, sidebar) and the brand-bound copy (input placeholder, starter prompts).
 
 - **Edited from the UI.** `#/admin` → Branding tab. Changes preview live against the running app and only hit disk on Save. Non-technical staff never touch a file or trigger a rebuild.
 - **Served by the Bun sidecar.** `web/ws-server.ts` handles `GET/PUT /api/branding` plus asset upload at `/api/branding/asset/<slot>`; Vite proxies `/api/*` to it so the browser stays same-origin, exactly as it does for `/webhook`. Set `ADMIN_PASSCODE` in `docker-compose.yml` — without it, branding writes are unauthenticated.
@@ -83,6 +83,35 @@ The frontend is sold to different businesses, so every visual detail is data rat
 - **Do not add `transition: all`.** Chrome will not re-resolve a transitioning property when the custom property behind it changes, leaving elements stuck on the previous tenant's colours. Enumerate the properties instead; `theme.ts` also freezes transitions across a theme swap.
 - Config resolves before the first React render (`main.tsx`), so components read it synchronously via `useTenant()` — there is no loading state. A missing or malformed file degrades to neutral defaults rather than a blank screen.
 - Browser storage keys are tenant-scoped through `lib/branding/scope.ts`, so two tenants can share an origin without reading each other's conversations.
+
+## The avatar
+
+`avatar.kind` picks one of four renderers, all driven by the same
+`(state, amplitude, emotion)` triple so the app shell is agnostic:
+
+- **`mascot`** — `components/Mascot2D.tsx`, the supplied HAICI character. This is what the IUL tenant runs.
+- **`glb`** — `components/Avatar3D.tsx`, any GLB with ARKit/Oculus blendshapes.
+- **`image`** — a still from `avatar.imageUrl`.
+- **`none`** — the panel is dropped.
+
+`FaceState` and `Emotion` both live in `web/src/types.ts`; a new avatar renderer should import from there, never from a sibling renderer.
+
+### Mascot assets are generated, not hand-made
+
+`web/public/mascot/` and `web/src/lib/mascotRig.ts` are **build output** from `tools/build_mascot_assets.py`, which flattens the vendor "HAICI Mascot Animation Asset Pack" (unzip it anywhere and pass `--pack`). Do not hand-edit either — change the script and rerun:
+
+```bash
+python tools/build_mascot_assets.py --pack /path/to/HAICI_Mascot_Animation_Asset_Pack
+```
+
+Things worth knowing before touching it:
+
+- The pack mixes three canvas registrations. Only `source/PSD_Layers/SVG/` is on the 2000x3200 master; the isolated parts under `assets/svg/head/` are anchor-centred and **cannot** be composited by position. Face overlays (eyes/brows/mouths/marks) are a clean 1024x1024 drop-in at master `(488, 290)`.
+- Every pack SVG carries a byte-identical `<defs>`. That is the only reason layer bodies can be concatenated without id collisions — check it still holds if a new pack arrives.
+- Registration and pivots are read from the pack's rig JSON and emitted to `mascotRig.ts`. Never retype those numbers into the TSX.
+- `Mascot2D` animates through one `requestAnimationFrame` loop writing styles directly, reading props via a ref. Do not convert it to React state — it runs at 60fps.
+- The mascot keeps its own palette on purpose. It is supplied artwork like a logo, so it is the one component exempt from "never write a raw colour"; retinting it would break the brand it belongs to.
+- The root element carries `aspect-ratio`, so callers must constrain exactly one axis (`h-full` for the `full` crop, `w-full` for `head`). Pinning both stretches the artwork.
 
 ## Domain context
 

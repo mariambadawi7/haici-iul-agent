@@ -21,6 +21,14 @@ export function useSTT() {
   const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number | null>(null);
   const startedAtRef = useRef<number>(0);
+  /**
+   * Loudest frame seen during this recording. Groq's whisper-large-v3-turbo
+   * reports `no_speech_prob: 0` even for pure digital silence, so the server
+   * cannot tell a silent clip from speech — it just hallucinates a plausible
+   * phrase ("Thank you.") and language-detects that. Gating here, where we
+   * already measure the signal for the level meter, is the reliable place.
+   */
+  const peakRef = useRef<number>(0);
 
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -100,16 +108,29 @@ export function useSTT() {
           const v = (data[i] - 128) / 128;
           sum += v * v;
         }
-        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3));
+        const lvl = Math.min(1, Math.sqrt(sum / data.length) * 3);
+        if (lvl > peakRef.current) peakRef.current = lvl;
+        setLevel(lvl);
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
 
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "";
+      // Safari (iPadOS/iOS/macOS) supports neither WebM nor Opus — it records AAC
+      // in an MP4 container. The old two-branch check fell through to `""` there,
+      // so the recorder silently produced audio/mp4 while the rest of the pipeline
+      // went on labelling it WebM. Groq then decoded AAC bytes as Opus and Whisper
+      // language-detected the resulting noise. Name the real container instead.
+      const CANDIDATE_MIMES = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4;codecs=mp4a.40.2",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
+      const isSupported = (t: string) =>
+        typeof MediaRecorder.isTypeSupported === "function" &&
+        MediaRecorder.isTypeSupported(t);
+      const mime = CANDIDATE_MIMES.find(isSupported) ?? "";
       const rec = mime
         ? new MediaRecorder(stream, { mimeType: mime })
         : new MediaRecorder(stream);
@@ -121,6 +142,7 @@ export function useSTT() {
       rec.start(1000);
       recorderRef.current = rec;
       startedAtRef.current = Date.now();
+      peakRef.current = 0;
       setStatus("recording");
       console.info("[stt] recording started", { mime });
     } catch (e: any) {
@@ -154,6 +176,16 @@ export function useSTT() {
           resolve({
             blob: null,
             reason: "Recording was empty — please try again.",
+          });
+          return;
+        }
+        // Nothing above the noise floor: sending this gets a hallucinated
+        // transcript back rather than an error, so stop it here.
+        if (peakRef.current < 0.05) {
+          resolve({
+            blob: null,
+            reason:
+              "No speech was picked up — check the microphone and try again.",
           });
           return;
         }

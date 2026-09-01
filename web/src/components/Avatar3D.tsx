@@ -4,9 +4,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import type { FaceState } from "../types";
-
-export type Emotion = "neutral" | "happy" | "sad" | "surprised";
+import type { Emotion, FaceState } from "../types";
 
 interface Props {
   state: FaceState;

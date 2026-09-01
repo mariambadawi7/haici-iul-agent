@@ -13,7 +13,10 @@
 export type ThemeMode = "light" | "dark";
 
 /** How the assistant is represented on screen. */
-export type AvatarKind = "glb" | "image" | "none";
+export type AvatarKind = "mascot" | "glb" | "image" | "none";
+
+/** Which crop of the 2D mascot the assistant panel shows. */
+export type MascotView = "head" | "full";
 
 export interface BrandIdentity {
   /** Product name shown in the brand strip, status card and browser tab. */
@@ -57,6 +60,12 @@ export interface BrandAvatar {
   glbUrl: string;
   /** Still image, used when kind === "image" and on the landing hero. */
   imageUrl: string;
+  /**
+   * Framing for the bundled 2D mascot, used when kind === "mascot": the whole
+   * character, or a crop to the face where the panel is short and the
+   * expression needs to carry.
+   */
+  mascotView: MascotView;
 }
 
 export interface BrandFeatures {
@@ -70,6 +79,12 @@ export interface BrandFeatures {
   admin: boolean;
   /** Conversation history rail. */
   sidebar: boolean;
+  /**
+   * Camera vision (OpenCam): presence detection, face recognition, emotion.
+   * Off by default — it needs the vision backend running, and it is a camera
+   * pointed at the public, which is a tenant's decision rather than ours.
+   */
+  camera: boolean;
 }
 
 /**

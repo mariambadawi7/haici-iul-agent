@@ -5,15 +5,18 @@ import MessageInput from "./components/MessageInput";
 import LandingPage from "./components/LandingPage";
 import BrandStrip, { BrandFooter } from "./components/BrandStrip";
 import HealthBanner from "./components/HealthBanner";
-import Avatar3D, { type Emotion } from "./components/Avatar3D";
+import Avatar3D from "./components/Avatar3D";
+import Mascot2D from "./components/Mascot2D";
 import { useChat } from "./hooks/useChat";
 import { useHardware } from "./hooks/useHardware";
+import { usePresence } from "./hooks/usePresence";
+import { useVision } from "./hooks/useVision";
 import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
 import { config, twoStage } from "./lib/api";
 import { useTenant } from "./lib/branding/context";
-import type { FaceState } from "./types";
+import type { Emotion, FaceState } from "./types";
 
 const STATE_LABEL: Record<FaceState, string> = {
   idle: "Ready",
@@ -28,8 +31,15 @@ export default function App() {
 
   const tts = useTTS();
   const stt = useSTT();
+
+  // Written after `vision` is set up below; read only when a turn is sent, by
+  // which point it holds whatever the camera currently believes. A ref rather
+  // than a value because useChat is created before useVision runs.
+  const visitorRef = useRef<{ name: string | null; emotion: string | null } | null>(null);
+
   const chat = useChat({
     wantsAudio: features.voice && tts.enabled,
+    getVisitor: () => visitorRef.current,
     onAudio: (blob) => {
       tts.playBlob(blob).catch((e) =>
         console.error("[app] TTS playback failed", e),
@@ -150,7 +160,7 @@ export default function App() {
   const effectiveAmplitude = tts.speaking ? tts.amplitude : synthAmplitude;
 
   // Lightweight sentiment of the latest answer → drives the avatar's expression.
-  const emotion: Emotion = useMemo(() => {
+  const replyEmotion: Emotion = useMemo(() => {
     const msgs = chat.active?.messages ?? [];
     const last = [...msgs].reverse().find((m) => m.role === "assistant" && m.content);
     const t = (last?.content ?? "").toLowerCase();
@@ -163,13 +173,62 @@ export default function App() {
     return "neutral";
   }, [chat.active?.messages]);
 
-  useHardware({
-    faceState,
-    onNewSession: () => {
+  // Camera vision. Off unless the tenant enables it, and silently inert if the
+  // vision backend is unreachable — the kiosk must not depend on it.
+  const vision = useVision({ enabled: features.camera });
+
+  // The mascot is the agent's own face, so what it should express depends on
+  // whose turn it is. While the agent is thinking or speaking it wears the
+  // sentiment of its own answer. While it is idle or listening it has nothing
+  // of its own to express, so it mirrors the visitor — which is what makes a
+  // receptionist look like it is paying attention rather than staring.
+  //
+  // vision.emotion is already smoothed over a 2 s window (see useVision); the
+  // raw per-frame label would make this twitch several times a second.
+  const attending = faceState === "idle" || faceState === "listening";
+  const emotion: Emotion =
+    attending && vision.emotion ? vision.emotion : replyEmotion;
+
+  // Every turn carries who the camera thinks it is talking to. Null fields are
+  // dropped in sendChat, so "no visitor key" means the kiosk cannot see anyone.
+  visitorRef.current = vision.signal.live
+    ? { name: vision.signal.identity, emotion: vision.emotion }
+    : null;
+
+  const startConversation = useCallback(
+    (name: string | null) => {
       chat.createSession();
       setView("chat");
-      setTimeout(() => chat.sendText("Hello!"), 120);
+      // The name comes from a face match, which can be wrong. It is phrased as
+      // the visitor introducing themselves rather than as an assertion the
+      // kiosk makes about them, so a mismatch reads as a misunderstanding the
+      // person can correct, not as the machine insisting who they are.
+      const greeting = name ? `Hello! I'm ${name}.` : "Hello!";
+      setTimeout(() => chat.sendText(greeting), 120);
     },
+    [chat],
+  );
+
+  const presence = usePresence({
+    vision: vision.signal,
+    onWake: ({ name }) => startConversation(name),
+    onDepart: () => {
+      // The visitor walked away. Clear the transcript so the next person does
+      // not arrive at a stranger's conversation, and stop any reply mid-speech.
+      tts.stop();
+      chat.createSession();
+      if (features.landing) setView("landing");
+    },
+  });
+
+  useHardware({
+    faceState,
+    // The button is an explicit request. Routed through the same wake so it
+    // picks up a recognised name when the camera has been running long enough
+    // to have one.
+    onNewSession: () => presence.wake("button"),
+    // The ultrasonic sensor is evidence, weighed against what the camera sees.
+    onPresence: presence.pulse,
     onStartRecord: () => {
       if (stt.permission !== "granted") {
         stt.requestPermission();
@@ -188,13 +247,12 @@ export default function App() {
     },
   });
 
+  // The landing tap is also the gesture that lets the camera start, if the
+  // tenant has vision on — getUserMedia refuses outside one. useVision picks
+  // that up from the pointerdown itself, so nothing extra is needed here.
   const beginConversation = useCallback(() => {
-    chat.createSession();
-    setView("chat");
-    setTimeout(() => {
-      chat.sendText("Hello!");
-    }, 120);
-  }, [chat]);
+    presence.wake("button");
+  }, [presence]);
 
   // Tenants without the landing screen drop straight into the conversation;
   // `view` still exists so the home button can return there when they do.
@@ -250,10 +308,23 @@ export default function App() {
           {features.avatar && avatar.kind !== "none" && (
           <div className="relative shrink-0 lg:w-[22rem] flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 transition-all">
 
-             {/* The assistant — an animated 3D head, or a still image for
-                 tenants who supplied artwork instead of a rigged model. */}
+             {/* The assistant — the rigged 2D mascot, an animated 3D head, or
+                 a still image for tenants who supplied flat artwork. All three
+                 read the same face state and speech amplitude. */}
              <div className="h-52 lg:h-80 w-full flex items-center justify-center">
-                {avatar.kind === "glb" ? (
+                {avatar.kind === "mascot" ? (
+                  <Mascot2D
+                    state={faceState}
+                    amplitude={effectiveAmplitude}
+                    emotion={emotion}
+                    view={avatar.mascotView}
+                    // The wide face crop is bounded by the column, the tall
+                    // full-body crop by the panel's height.
+                    className={`drop-shadow-xl ${
+                      avatar.mascotView === "head" ? "w-full" : "h-full"
+                    }`}
+                  />
+                ) : avatar.kind === "glb" ? (
                   <Avatar3D
                     state={faceState}
                     amplitude={effectiveAmplitude}

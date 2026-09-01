@@ -5,6 +5,7 @@ import {
   fetchAudio,
   twoStage,
   type ChatReply,
+  type Visitor,
 } from "../lib/api";
 import {
   deleteAudio,
@@ -30,6 +31,12 @@ interface UseChatOpts {
   wantsAudio: boolean;
   /** Called with the audio blob from a successful reply (for playback). */
   onAudio?: (blob: Blob) => void;
+  /**
+   * Read what the camera currently sees, at send time rather than at hook
+   * setup — identity resolves seconds after a conversation starts, so a value
+   * captured when this hook mounted would always be stale.
+   */
+  getVisitor?: () => Visitor | null;
 }
 
 /**
@@ -40,7 +47,7 @@ interface UseChatOpts {
  *     audio is replayed from IndexedDB → both survive a page reload
  *   - toast / error surface
  */
-export function useChat({ wantsAudio, onAudio }: UseChatOpts) {
+export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
   const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
   const [activeId, setActiveIdState] = useState<string | null>(() =>
     loadActive(),
@@ -51,8 +58,8 @@ export function useChat({ wantsAudio, onAudio }: UseChatOpts) {
 
   const abortRef = useRef<AbortController | null>(null);
   // Latest opts captured for use inside dispatch closures.
-  const optsRef = useRef({ wantsAudio, onAudio });
-  optsRef.current = { wantsAudio, onAudio };
+  const optsRef = useRef({ wantsAudio, onAudio, getVisitor });
+  optsRef.current = { wantsAudio, onAudio, getVisitor };
 
   // ---- Persistence ----
   useEffect(() => saveSessions(sessions), [sessions]);
@@ -219,12 +226,13 @@ export function useChat({ wantsAudio, onAudio }: UseChatOpts) {
       });
 
       try {
-        const { wantsAudio: wa, onAudio: oa } = optsRef.current;
+        const { wantsAudio: wa, onAudio: oa, getVisitor: gv } = optsRef.current;
         const askMainForAudio = wa && !twoStage;
+        const visitor = gv?.() ?? null;
         
         let reply: ChatReply;
         if (payload.kind === "text") {
-          reply = await sendChat(sessionId, payload.text, askMainForAudio, ctl.signal);
+          reply = await sendChat(sessionId, payload.text, askMainForAudio, ctl.signal, visitor);
         } else {
           updateMessage(sessionId, userMessageId, {
             content: "🎙️ (Transcribing...)",
@@ -243,7 +251,7 @@ export function useChat({ wantsAudio, onAudio }: UseChatOpts) {
             errorMessage: undefined,
           });
           
-          reply = await sendChat(sessionId, transcript, askMainForAudio, ctl.signal);
+          reply = await sendChat(sessionId, transcript, askMainForAudio, ctl.signal, visitor);
           reply.question = transcript;
         }
 

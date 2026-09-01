@@ -1,7 +1,7 @@
 {
   "id": "iul",
   "identity": {
-    "name": "IUL Agent",
+    "name": "IUL x HAICI Agent",
     "kicker": "IUL • HAICI",
     "tagline": "Premium robot assistant design for intelligent campus guidance.",
     "logoPrimary": "/iul_logo.png",
@@ -21,16 +21,18 @@
     "radius": "1rem"
   },
   "avatar": {
-    "kind": "glb",
+    "kind": "mascot",
     "glbUrl": "/avatar/facecap.glb",
-    "imageUrl": "/mascot_avatar.png"
+    "imageUrl": "/mascot/still.svg",
+    "mascotView": "full"
   },
   "features": {
     "voice": true,
     "avatar": true,
     "landing": true,
     "admin": true,
-    "sidebar": true
+    "sidebar": true,
+    "camera": true
   },
   "content": {
     "inputPlaceholder": "Ask anything about IUL — or tap the mic to speak",

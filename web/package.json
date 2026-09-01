@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@opencam/client": "file:./vendor/opencam-client-1.0.0.tgz",
     "@react-three/drei": "^9.99.0",
     "@react-three/fiber": "^8.15.19",
     "framer-motion": "^11.11.17",

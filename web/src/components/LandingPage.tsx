@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Mic, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import BrandStrip, { BrandFooter } from "./BrandStrip";
+import Mascot2D from "./Mascot2D";
 import { useTenant } from "../lib/branding/context";
 
 interface Props {
@@ -19,9 +20,11 @@ export default function LandingPage({ onBegin }: Props) {
     setTimeout(onBegin, 450);
   };
 
-  // The hero image is the tenant's still avatar. A tenant running without one
-  // (or with the avatar feature switched off) simply gets a tighter layout.
-  const hero = features.avatar ? avatar.imageUrl : "";
+  // The hero is the tenant's avatar at rest: the mascot idles and blinks for
+  // real, everyone else gets their still artwork. A tenant running without
+  // either (or with the avatar feature switched off) gets a tighter layout.
+  const showMascot = features.avatar && avatar.kind === "mascot";
+  const hero = features.avatar && !showMascot ? avatar.imageUrl : "";
 
   return (
     <motion.div
@@ -32,19 +35,32 @@ export default function LandingPage({ onBegin }: Props) {
     >
       <BrandStrip className="w-full" />
 
-      <div className="flex-1 w-full flex flex-col items-center justify-center p-8">
-        {hero && (
+      {/* overflow-y-auto is a safety net, not the primary fix: the hero
+          is sized in vh precisely so this content fits without scrolling
+          on any realistic window. It only engages on a window shorter than
+          a phone in landscape. */}
+      <div className="flex-1 w-full min-h-0 flex flex-col items-center justify-center gap-4 md:gap-8 p-4 md:p-8 overflow-y-auto">
+        {(showMascot || hero) && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.1 }}
-            className="mb-10"
+            // Viewport-relative, not a fixed rem height: a full-body mascot is
+            // tall and narrow, and on a short window (a laptop's browser chrome
+            // eating into it, or this app embedded in a small pane) a fixed
+            // size can grow past the space the button below needs. Capped at
+            // both ends so it neither vanishes nor towers on a tall display.
+            className="h-[clamp(8rem,30vh,18rem)] md:h-[clamp(10rem,34vh,22rem)] shrink-0"
           >
-            <img
-              src={hero}
-              alt={`${identity.name} mascot`}
-              className="w-72 h-72 md:w-80 md:h-80 object-contain drop-shadow-2xl"
-            />
+            {showMascot ? (
+              <Mascot2D state="idle" view="full" className="h-full drop-shadow-2xl" />
+            ) : (
+              <img
+                src={hero}
+                alt={`${identity.name} mascot`}
+                className="h-full w-auto max-w-[70vw] object-contain drop-shadow-2xl"
+              />
+            )}
           </motion.div>
         )}
 
