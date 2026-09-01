@@ -930,7 +930,7 @@ them would defeat the point:
 | value | meaning |
 |---|---|
 | `false` | the semantic tier ran; nothing cleared the bar, or the judge said `DIFFERENT` |
-| `true` | the tier could not run — `semanticSkipReason` is `embedding_unavailable` or `lookup_failed` |
+| `true` | the tier could not finish — `semanticSkipReason` is `embedding_unavailable`, `lookup_failed` or `judge_unavailable` |
 | `NULL` | never reached: a tier-1 cache hit answered first |
 
 Verified across all three on live traffic — and the very first test run caught a
@@ -952,10 +952,38 @@ but `QuestionLog` renders a fixed column set (Time / Question / Type / Match /
 Latency) and simply ignores it — no dashboard change was needed. Surfacing it
 there is a small follow-up if the operator view should show degraded turns.
 
-Still open: `Judge Same Question` calls the same Gemini API with the same
-`continueRegularOutput` fallback and has no retry — it is the next candidate if
-quota errors show up there too. A judge failure currently reads as
-`isSame: false`, i.e. an ordinary cache miss, with no equivalent flag.
+**`Judge Same Question` now gets the same treatment.** It calls the same Gemini
+API behind the same `continueRegularOutput` fallback, so it had the identical
+blind spot one stage later: the judge going down and the judge answering
+`DIFFERENT` both end the turn as a cache miss, while meaning opposite things —
+one is a degraded turn that *should* have been reusable, the other is the design
+working. It now carries `retryOnFail: true, maxTries: 3, waitBetweenTries: 5000`,
+and `Check Verdict` sets `semanticSkipped` with reason `judge_unavailable` when
+the judge returns an error or an empty verdict.
+
+The failure is folded into the **same** `semantic_skipped` column rather than a
+second boolean: from the log's point of view `embedding_unavailable`,
+`lookup_failed` and `judge_unavailable` are one question — "did this `fresh`
+turn happen because nothing matched, or because the tier could not finish?" —
+and `semanticSkipReason` separates them when that matters.
+
+`Check Verdict` deliberately **takes precedence** over `Semantic Lookup` in the
+logger, because the two can legitimately disagree: the lookup succeeds (it found
+a candidate) and the judge fails afterwards. Verified on a throwaway clone whose
+judge URL pointed at a non-existent model, so production was never broken to
+test it:
+
+```
+Semantic Lookup : candidateFound=true, score=0.963, semanticSkipped=false
+Judge           : error "The resource you are requesting could not be found"
+Check Verdict   : semanticSkipped=true, semanticSkipReason='judge_unavailable'
+logged          : semantic_skipped=t, match_type='fresh'
+```
+
+Had the logger kept reading `Semantic Lookup`, that degraded turn would have
+been recorded as a genuine miss — the precedence is the whole point, not a
+detail. Both genuine `DIFFERENT` verdicts tested alongside it logged `false`,
+so the flag does not simply mark every cache miss.
 
 ---
 
