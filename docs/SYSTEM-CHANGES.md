@@ -706,11 +706,32 @@ round trip; `receptionist_session_logs` still writes rows with populated
   had them; a later publish promoted that draft. Moot now that the branch is
   gone, but it is the draft/active divergence trap of §9 actually firing and
   destroying config with no error — worth one slide.
-- **`calder` was added to the `Khaldeh` aliases** in the `typo_lexicon` row
-  (`version` 1 → 2), because spoken "Khaldeh" reaches the agent as *"Where is
-  the IUL campus in Calder?"* — Layer 1 does not prevent it and fuzzy matching
-  does not reach it. Confirmed working end-to-end after the restore below.
-  Backup: `.workflow-backups/typo_lexicon_pre_calder_20260901T121405Z.json`.
+- **Two speech mishearings added to the lexicon** (`typo_lexicon`, `version`
+  1 → 3), both found by listening to what the STT actually returns rather than
+  by guessing:
+  `calder` → `Khaldeh` (spoken "Khaldeh" comes back as *"the IUL campus in
+  Calder"*) and `haci` → `HAICI` (spoken "HAICI" comes back as *"HACI"*).
+
+  Both needed an **exact alias**, and for the same structural reason: fuzzy
+  matching only applies at or above `thresholds.minFuzzyLen` (5 characters), so
+  a 4-character token like `haci` can never be reached by it no matter how close
+  the score would be. Short acronyms are therefore invisible to Layer 2 unless
+  listed explicitly — worth knowing before adding more.
+
+  Verified from real audio, not typed text — the `haci` case end-to-end through
+  the microphone path:
+
+  ```
+  raw_question | Tell me about HACI at the Islamic University of Lebanon.
+  question     | Tell me about HAICI at the Islamic University of Lebanon.
+  corrections  | [{"to": "HAICI", "from": "HACI", "tier": "A", "score": 1}]
+  ```
+
+  Before this, both were caught only by Layer 3 (the agent's transcription-noise
+  tolerance) — the answer was right but the repair happened a layer later and at
+  the cost of a full model call. Backups:
+  `.workflow-backups/typo_lexicon_pre_calder_20260901T121405Z.json` and
+  `..._pre_haci_20260901T171723Z.json`.
 - **The typed/spoken distinction is restored, via an explicit client flag.**
   Removing the audio branch left nothing server-side able to tell a spoken turn
   from a typed one, since speech now arrives already transcribed — which
