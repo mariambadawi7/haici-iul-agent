@@ -815,7 +815,7 @@ Verified live: `raw_question` *"Where is the IUL campus in Calder?"* → `questi
 is running again and the new alias works. Backup:
 `.workflow-backups/d8nftRI2zhutW98L_pre_layer2_restore_20260901T121845Z.json`.
 
-### ⚠ The Redis credential is dead — the answer cache writes nothing
+### The answer cache was dead for ~17 rows of traffic — a deleted credential
 
 Tracing an execution after the restore showed every Redis node failing with
 `Credential with ID "Pk9dL1I9ykAW6ha3" does not exist for type "redis"`. That
@@ -836,9 +836,29 @@ The three restored `(Corrected)` / `Fetch Semantic Hit` nodes came back on the
 succeed, but `Check Redis Cache` still reads with the dead one, so nothing ever
 hits.
 
-**Outstanding:** repoint those three nodes to `bDN9Hfgixc2fSuSq`. A ready payload
-is staged at `.workflow-backups/PENDING_redis_credential_fix.json` (identical to
-the live workflow except for the three credential references).
+**Fixed.** All six Redis nodes now reference `bDN9Hfgixc2fSuSq`. Verified by
+asking one question three ways:
+
+| turn | `match_type` | latency |
+|---|---|---|
+| first ask | `fresh` | 9,943 ms |
+| same question again | `cache_hit` | **123 ms** |
+| English paraphrase | `semantic_hit` | 1,993 ms |
+
+That is the first `cache_hit` since row 250, and it makes the two-tier design of
+§2 measurable at last: ~80x on an exact repeat, ~5x on a paraphrase that has to
+go through the embedding shortlist and the LLM judge.
+
+**Caveat found while testing.** The Arabic paraphrase *"هل تقدم الجامعة منحاً
+لطلاب الهندسة؟"* did **not** reuse the answer cached from the English question —
+it logged `fresh` (9,032 ms). §2 claims the judge prompt makes language
+differences irrelevant, and that is true of the *judge*; but the judge only ever
+sees candidates that clear the embedding shortlist first (`score_threshold 0.8`
+in `Semantic Lookup`), and a cross-language pair appears not to reach that bar,
+so the judge is never consulted. One sample, not a measurement — but the
+cross-language claim in §2 should be re-tested before it goes in the report,
+since the shortlist stage may be quietly gating what the judge was designed to
+decide.
 
 ---
 

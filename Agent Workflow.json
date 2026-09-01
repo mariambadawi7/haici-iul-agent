@@ -85,8 +85,8 @@
       ],
       "credentials": {
         "redis": {
-          "id": "Pk9dL1I9ykAW6ha3",
-          "name": "Redis account"
+          "id": "bDN9Hfgixc2fSuSq",
+          "name": "Redis account (authenticated)"
         }
       },
       "onError": "continueRegularOutput"
@@ -156,8 +156,8 @@
       ],
       "credentials": {
         "redis": {
-          "id": "Pk9dL1I9ykAW6ha3",
-          "name": "Redis account"
+          "id": "bDN9Hfgixc2fSuSq",
+          "name": "Redis account (authenticated)"
         }
       },
       "onError": "continueRegularOutput"
@@ -810,8 +810,8 @@
       ],
       "credentials": {
         "redis": {
-          "id": "Pk9dL1I9ykAW6ha3",
-          "name": "Redis account"
+          "id": "bDN9Hfgixc2fSuSq",
+          "name": "Redis account (authenticated)"
         }
       },
       "onError": "continueRegularOutput"
@@ -1780,5 +1780,5 @@
     "templateCredsSetupCompleted": true
   },
   "id": "d8nftRI2zhutW98L",
-  "versionId": "6243db98-6a58-4884-9df4-9087390f2adb"
+  "versionId": "0fa5f398-dc38-427c-8a30-33ac2fe00fce"
 }
