@@ -849,16 +849,59 @@ That is the first `cache_hit` since row 250, and it makes the two-tier design of
 §2 measurable at last: ~80x on an exact repeat, ~5x on a paraphrase that has to
 go through the embedding shortlist and the LLM judge.
 
-**Caveat found while testing.** The Arabic paraphrase *"هل تقدم الجامعة منحاً
-لطلاب الهندسة؟"* did **not** reuse the answer cached from the English question —
-it logged `fresh` (9,032 ms). §2 claims the judge prompt makes language
-differences irrelevant, and that is true of the *judge*; but the judge only ever
-sees candidates that clear the embedding shortlist first (`score_threshold 0.8`
-in `Semantic Lookup`), and a cross-language pair appears not to reach that bar,
-so the judge is never consulted. One sample, not a measurement — but the
-cross-language claim in §2 should be re-tested before it goes in the report,
-since the shortlist stage may be quietly gating what the judge was designed to
-decide.
+### Cross-language reuse re-tested — it works, and the first read was wrong
+
+An initial single sample suggested Arabic could not reuse an English-cached
+answer, and that the embedding shortlist was gating it before the judge ever
+ran. Re-testing with n8n execution data (shortlist score and judge verdict per
+turn, rather than just the logged `match_type`) showed that reading was wrong on
+both points.
+
+| Query | vs cached question | shortlist | judge | outcome |
+|---|---|---|---|---|
+| EN paraphrase | EN | 0.9721 | `SAME` | `semantic_hit` |
+| **AR** | **EN** | **0.9444** | **`SAME`** | **`semantic_hit`** |
+| AR | AR | 0.9382 | `SAME` | `semantic_hit` |
+| AR | EN | 0.8989 | `DIFFERENT` | fresh |
+| EN | EN, different topic | 0.9060 | `DIFFERENT` | fresh |
+| EN | EN, general vs faculty | 0.8687 | `DIFFERENT` | fresh |
+
+**Cross-language reuse is real**: *"ما هي شروط القبول في كلية الحقوق؟"* served the
+answer cached for *"What are the admission requirements for the Faculty of
+Law?"*. Cross-language pairs clear the 0.8 shortlist comfortably (0.899, 0.944),
+so the shortlist is not the bottleneck the first read assumed.
+
+The one cross-language `DIFFERENT` was the judge working, not failing: *"does
+the university offer scholarships to engineering students"* (yes/no) against a
+cached *"what scholarships does IUL offer to engineering students"*
+(enumeration). The prompt lists "a different kind of detail" as grounds for
+`DIFFERENT`, so that verdict is defensible — the original test pair was a sloppy
+paraphrase, not a faithful translation. Both `DIFFERENT` verdicts on same-language
+pairs were also correct rejections of genuine near-misses, which is the §2
+retrieve-then-verify result holding up.
+
+### `Embed Question` silently drops the semantic tier under burst load
+
+The apparent cross-language failure was neither similarity nor the judge: the
+embedding call had returned
+
+```
+Quota exceeded for aiplatform.googleapis.com/global_embed_content_requests_per_minute_per_base_model
+```
+
+`Semantic Lookup` opens with `if (!vec || !vec.length) return [{ json:
+{ candidateFound: false } }]`, so a failed embedding is indistinguishable from
+"nothing similar found": the turn degrades to a full RAG answer, the execution
+is green, and the log records a perfectly ordinary `fresh`.
+
+**3 of 15** embedding calls (20%) failed this way during rapid testing. That is
+§8's "degrade, never break" behaving exactly as designed, and it is the right
+trade — but it means the Tier-2 hit rate falls off precisely when traffic is
+heaviest, and nothing surfaces it. Two things follow for the report: benchmark
+numbers taken from a burst will understate semantic-hit rate, and the node is
+worth a `retryOnFail` with backoff, or a distinct `match_type` for "semantic
+skipped" so the condition is visible in the logs rather than hiding inside
+`fresh`.
 
 ---
 
