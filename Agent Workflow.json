@@ -400,7 +400,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// Aggregate all TTS chunk outputs, concatenate PCM, insert silence between chunks,\n// then wrap in a single WAV container.\n\n// The answer can arrive from any of three upstream branches: a fresh agent\n// answer, a clarification reply, or a cache hit. Referencing a node that did\n// not execute THROWS, so probe rather than assume which one ran — and degrade\n// to an empty answer instead of failing the whole turn if none of them did.\nfunction pickSource(name) {\n  try {\n    return $(name).isExecuted ? $(name).first().json : null;\n  } catch (e) {\n    return null;\n  }\n}\nconst source = pickSource('Keep Answer Text')\n  || pickSource('Build Clarification Reply')\n  || pickSource('Parse Cached Response')\n  || {};\nconst answer = source.answer || '';\nconst question = source.question || '';\n\n// Graceful no-audio fallback\nconst NO_AUDIO = [{ json: { answer, question, audioMime: '', audioBase64: '' } }];\n\n// Collect all items, sorted by chunkIndex\nconst items = $input.all();\nif (!items || items.length === 0) return NO_AUDIO;\n\n// Sort by chunkIndex (should already be in order, but be safe)\nitems.sort((a, b) => (a.json.chunkIndex ?? 0) - (b.json.chunkIndex ?? 0));\n\n// Extract PCM buffers and sample rates from each chunk\nconst pcmBuffers = [];\nconst sampleRates = [];\n\nfor (const item of items) {\n  const cands = item.json.candidates;\n  if (!cands || !cands[0] || !cands[0].content || !cands[0].content.parts || !cands[0].content.parts[0]) {\n    // Missing audio data for this chunk — degrade gracefully\n    return NO_AUDIO;\n  }\n  const part = cands[0].content.parts[0];\n  const pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\n  if (!pcmB64) return NO_AUDIO;\n\n  const mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\n  const m = mime.match(/rate=(\\d+)/);\n  const sr = m ? parseInt(m[1], 10) : 24000;\n\n  pcmBuffers.push(Buffer.from(pcmB64, 'base64'));\n  sampleRates.push(sr);\n}\n\n// Verify all chunks have the same sample rate; if not, fall back to first chunk only\nconst baseSampleRate = sampleRates[0];\nconst allSameRate = sampleRates.every(r => r === baseSampleRate);\n\nlet combinedPcm;\nif (!allSameRate) {\n  // Sample rate mismatch — use only first chunk to avoid garbled audio\n  combinedPcm = pcmBuffers[0];\n} else if (pcmBuffers.length === 1) {\n  combinedPcm = pcmBuffers[0];\n} else {\n  // Insert ~150ms silence (zero-filled 16-bit mono PCM) between chunks\n  const silenceByteCount = Math.round(baseSampleRate * 0.15) * 2; // 16-bit = 2 bytes/sample\n  const silence = Buffer.alloc(silenceByteCount, 0);\n\n  const parts = [];\n  for (let i = 0; i < pcmBuffers.length; i++) {\n    parts.push(pcmBuffers[i]);\n    if (i < pcmBuffers.length - 1) parts.push(silence);\n  }\n  combinedPcm = Buffer.concat(parts);\n}\n\n// Build 44-byte WAV header (mono, 16-bit LE)\nconst sampleRate = baseSampleRate;\nconst channels = 1;\nconst bitsPerSample = 16;\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\n\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + combinedPcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);          // PCM format\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(combinedPcm.length, 40);\n\nconst wav = Buffer.concat([h, combinedPcm]);\n\nreturn [{ json: { answer, question, audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];\n"
+        "jsCode": "\n// Aggregate all TTS chunk outputs, concatenate PCM, insert silence between chunks,\n// then wrap in a single WAV container.\n\n// The answer can arrive from any of three upstream branches: a fresh agent\n// answer, a clarification reply, or a cache hit. Referencing a node that did\n// not execute THROWS, so probe rather than assume which one ran — and degrade\n// to an empty answer instead of failing the whole turn if none of them did.\nfunction pickSource(name) {\n  try {\n    return $(name).isExecuted ? $(name).first().json : null;\n  } catch (e) {\n    return null;\n  }\n}\nconst source = pickSource('Keep Answer Text')\n  || pickSource('Build Clarification Reply')\n  || pickSource('Detect Greeting')\n  || pickSource('Parse Cached Response')\n  || {};\nconst answer = source.answer || '';\nconst question = source.question || '';\n\n// Graceful no-audio fallback\nconst NO_AUDIO = [{ json: { answer, question, audioMime: '', audioBase64: '' } }];\n\n// Collect all items, sorted by chunkIndex\nconst items = $input.all();\nif (!items || items.length === 0) return NO_AUDIO;\n\n// Sort by chunkIndex (should already be in order, but be safe)\nitems.sort((a, b) => (a.json.chunkIndex ?? 0) - (b.json.chunkIndex ?? 0));\n\n// Extract PCM buffers and sample rates from each chunk\nconst pcmBuffers = [];\nconst sampleRates = [];\n\nfor (const item of items) {\n  const cands = item.json.candidates;\n  if (!cands || !cands[0] || !cands[0].content || !cands[0].content.parts || !cands[0].content.parts[0]) {\n    // Missing audio data for this chunk — degrade gracefully\n    return NO_AUDIO;\n  }\n  const part = cands[0].content.parts[0];\n  const pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\n  if (!pcmB64) return NO_AUDIO;\n\n  const mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\n  const m = mime.match(/rate=(\\d+)/);\n  const sr = m ? parseInt(m[1], 10) : 24000;\n\n  pcmBuffers.push(Buffer.from(pcmB64, 'base64'));\n  sampleRates.push(sr);\n}\n\n// Verify all chunks have the same sample rate; if not, fall back to first chunk only\nconst baseSampleRate = sampleRates[0];\nconst allSameRate = sampleRates.every(r => r === baseSampleRate);\n\nlet combinedPcm;\nif (!allSameRate) {\n  // Sample rate mismatch — use only first chunk to avoid garbled audio\n  combinedPcm = pcmBuffers[0];\n} else if (pcmBuffers.length === 1) {\n  combinedPcm = pcmBuffers[0];\n} else {\n  // Insert ~150ms silence (zero-filled 16-bit mono PCM) between chunks\n  const silenceByteCount = Math.round(baseSampleRate * 0.15) * 2; // 16-bit = 2 bytes/sample\n  const silence = Buffer.alloc(silenceByteCount, 0);\n\n  const parts = [];\n  for (let i = 0; i < pcmBuffers.length; i++) {\n    parts.push(pcmBuffers[i]);\n    if (i < pcmBuffers.length - 1) parts.push(silence);\n  }\n  combinedPcm = Buffer.concat(parts);\n}\n\n// Build 44-byte WAV header (mono, 16-bit LE)\nconst sampleRate = baseSampleRate;\nconst channels = 1;\nconst bitsPerSample = 16;\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\n\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + combinedPcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);          // PCM format\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(combinedPcm.length, 40);\n\nconst wav = Buffer.concat([h, combinedPcm]);\n\nreturn [{ json: { answer, question, audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];\n"
       },
       "id": "e55d005f-da8d-47c5-b7ea-56b46c009b98",
       "name": "Build JSON (Text + Audio)",
@@ -948,8 +948,8 @@
       },
       "onError": "continueRegularOutput",
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000
+      "maxTries": 2,
+      "waitBetweenTries": 1000
     },
     {
       "id": "b094ef35-3a13-4166-a384-439fc9963622",
@@ -1218,8 +1218,8 @@
       },
       "onError": "continueRegularOutput",
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000
+      "maxTries": 2,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -1306,6 +1306,54 @@
       "parameters": {
         "jsCode": "// Qdrant needs no auth, so call it straight from the Code node.\n// Any failure here must degrade to a normal cache miss, never break the turn.\n// `semanticSkipped` separates \"the semantic tier could not run\" from \"it ran\n// and found nothing similar\". Both end the turn as match_type 'fresh', so\n// without this an embedding outage is invisible in the logs and silently\n// depresses the measured semantic-hit rate.\nconst vec = $json.embedding && $json.embedding.values;\nif (!vec || !vec.length) {\n  return [{ json: {\n    candidateFound: false,\n    semanticSkipped: true,\n    semanticSkipReason: 'embedding_unavailable',\n  } }];\n}\ntry {\n  const res = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'http://qdrant:6333/collections/faq_cache/points/search',\n    body: { vector: vec, limit: 3, with_payload: true, score_threshold: 0.8 },\n    json: true,\n  });\n  const top = res && res.result && res.result[0];\n  if (!top || !top.payload || !top.payload.questionHash) {\n    // Ran fine, genuinely nothing above the threshold.\n    return [{ json: { candidateFound: false, semanticSkipped: false } }];\n  }\n  return [{ json: {\n    candidateFound: true,\n    semanticSkipped: false,\n    candidateHash: top.payload.questionHash,\n    candidateQuestion: top.payload.question,\n    candidateScore: top.score,\n  } }];\n} catch (e) {\n  return [{ json: {\n    candidateFound: false,\n    semanticSkipped: true,\n    semanticSkipReason: 'lookup_failed',\n    lookupError: String(e).slice(0, 200),\n  } }];\n}"
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// A greeting needs no document lookup and no semantic-cache probe. Answering it\n// inline turns a ~20 s first impression into a sub-second one — measured: a\n// greeting that missed cache cost 21-23 s, almost all of it Embed Question and\n// the agent, for a reply that never depended on either.\n//\n// Deliberately STRICTER than the greeting test in Anonymize Log Entry: that one\n// only labels a row after the fact, whereas a false positive HERE answers a real\n// question with \"how can I help you?\". So a greeting only short-circuits when\n// the whole utterance is a greeting (a self-introduction is allowed).\nconst GREET = /(^|\\s)(hello|hi|hey|hiya|greetings|good morning|good afternoon|good evening|salam|salaam|assalamu alaikum|مرحبا|اهلا|أهلا|اهلين|السلام عليكم|صباح الخير|مساء الخير)(\\s|$)/;\n// Anything that smells like an actual request disqualifies it, so\n// \"hello, what are the deadlines?\" still reaches the agent.\nconst ASKS = /(^|\\s)(what|where|when|how|why|who|which|can|could|do|does|did|is|are|was|tell|need|want|apply|cost|price|fee|fees|deadline|deadlines|register|registration|admission|admissions|program|programs|campus|scholarship|scholarships|ما|ماذا|أين|اين|متى|كيف|لماذا|من|هل|كم|أريد|اريد|بدي)(\\s|$)/;\n\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const raw = String(j.userText || '');\n  const norm = raw.toLowerCase().replace(/[^\\p{L}\\p{N}\\s]/gu, ' ').replace(/\\s+/g, ' ').trim();\n  const words = norm ? norm.split(' ') : [];\n\n  const isGreeting =\n    !!norm &&\n    words.length <= 8 &&\n    !/[?\\u061F]/.test(raw) &&\n    GREET.test(norm) &&\n    !ASKS.test(norm);\n\n  if (!isGreeting) {\n    // Pass through untouched so the normal path sees exactly what it did before.\n    item.json.isGreeting = false;\n    out.push(item);\n    continue;\n  }\n\n  let visitorName = '';\n  try {\n    visitorName = String($('Normalize & Hash Question').first().json.visitorName || '').trim();\n  } catch (e) { visitorName = ''; }\n\n  let wantsAudio = true;\n  try {\n    wantsAudio = String($('Webhook').first().json.body?.wantsAudio) !== 'false';\n  } catch (e) { wantsAudio = true; }\n\n  const arabic = /[\\u0600-\\u06FF]/.test(raw);\n  const who = visitorName ? ' ' + visitorName : '';\n  // No institution name on purpose: this deployment is white-labelled at runtime\n  // (see the branding system), so hard-coding one here would be wrong for every\n  // other tenant.\n  const answer = arabic\n    ? 'أهلاً' + who + '! كيف يمكنني مساعدتك؟'\n    : 'Hello' + who + '! How can I help you today?';\n\n  item.json.isGreeting = true;\n  item.json.answer = answer;\n  item.json.question = raw;\n  item.json.wantsAudio = wantsAudio;\n  item.json.matchType = 'greeting';\n  item.json.audioBase64 = '';\n  item.json.audioMime = '';\n  out.push(item);\n}\nreturn out;\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "b1e7c0de-0000-4000-8000-000000000001",
+      "name": "Detect Greeting",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-greeting",
+              "leftValue": "={{ $json.isGreeting }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1e7c0de-0000-4000-8000-000000000002",
+      "name": "IF (Greeting?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        528,
+        620
+      ]
     }
   ],
   "connections": {
@@ -1723,7 +1771,7 @@
       "main": [
         [
           {
-            "node": "IF (Needs Clarification?)",
+            "node": "Detect Greeting",
             "type": "main",
             "index": 0
           }
@@ -1785,6 +1833,40 @@
           }
         ]
       ]
+    },
+    "Detect Greeting": {
+      "main": [
+        [
+          {
+            "node": "IF (Greeting?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Greeting?)": {
+      "main": [
+        [
+          {
+            "node": "IF (needs TTS?)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Anonymize Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF (Needs Clarification?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1796,5 +1878,5 @@
     "templateCredsSetupCompleted": true
   },
   "id": "d8nftRI2zhutW98L",
-  "versionId": "bdcc3bf2-3abc-4080-a046-8e78d1ff1f14"
+  "versionId": "06e60674-bd12-41f1-a336-ab2b1c105784"
 }

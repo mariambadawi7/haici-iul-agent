@@ -22,7 +22,7 @@ Snapshot date: 2026-08-29. Branch: `admin-dashboard-and-white-labeling`.
 
 | Workflow | id | Nodes | Active | Export |
 |---|---|---|---|---|
-| Agent Workflow | `d8nftRI2zhutW98L` | 43 | yes | `Agent Workflow.json` |
+| Agent Workflow | `d8nftRI2zhutW98L` | 45 | yes | `Agent Workflow.json` |
 | Admin Dashboard API | `9UwU0payk3rht1ms` | 25 | yes | `admin_dashboard_workflow.json` |
 | RAG workflow | `btAR6oU4MThHIYy9` | 7 | yes | `RAG workflow.json` |
 | STT Webhook | `KNUv1TRbHWl3v6oS` | 5 | yes | `STT Webhook.json` |
@@ -732,6 +732,56 @@ round trip; `receptionist_session_logs` still writes rows with populated
 
   An exact alias hit still auto-applies regardless of origin — spoken "Calder"
   corrects to Khaldeh at tier `A`, score 1, without asking.
+
+### Latency regression: the retry I added made things worse
+
+Reported symptom: greetings taking ~20 s, and the cache appearing to have been
+wiped. Three separate causes, one of them self-inflicted.
+
+**1. The `Embed Question` retry turned a free failure into a 12-second stall.**
+The Gemini embedding quota fails on roughly **28%** of calls, and that was always
+true — what changed was the price of failing. Measured on the same error:
+
+| | embedding fails | cost |
+|---|---|---|
+| before the retry | exec 1095 | **0.6 s**, fell straight through |
+| with `maxTries 3 / 5000 ms` | exec 1104, 1128, 1133 | **11.4 – 14.8 s** |
+
+7 of 18 embed calls were costing over 5 s, and the waits applied to calls that
+eventually *succeeded* too. This is exactly the trade flagged when the retry went
+in — "good for transient bursts, bad under sustained exhaustion" — and the quota
+turned out to be sustained, not bursty. **Reduced to `maxTries 2 /
+waitBetweenTries 1000`**: still absorbs a one-off network blip, but a quota error
+now costs ~1 s. Retrying harder cannot beat a per-minute quota, so there is no
+version of this that both retries hard and stays fast. Measured after:
+`Embed Question` back to **0.6–1.1 s**.
+
+**2. Greetings ran the entire pipeline.** "Hello!" went through semantic lookup,
+RAG and TTS — 21–23 s when the embedding stalled, for a reply that never
+depended on any of it. `Correct Domain Terms` → **`Detect Greeting`** →
+**`IF (Greeting?)`** now answers a pure greeting inline and routes everything
+else down the existing path untouched.
+
+The detector is deliberately stricter than the greeting test in
+`Anonymize Log Entry`: that one only labels a row after the fact, while a false
+positive *here* would answer a real question with "how can I help you?". So it
+requires the whole utterance to be a greeting — no question mark, ≤ 8 words, no
+request-shaped words — which is why *"Hello, what are the admission deadlines?"*
+still reaches the agent and gets a real answer. The reply carries no institution
+name, because the deployment is white-labelled at runtime and a hard-coded one
+would be wrong for every other tenant.
+
+Measured: greeting **21 s → 0.16–0.34 s**; a greeting-plus-question and an
+ordinary question both unchanged. Greeting turns log as `match_type: 'greeting'`
+so they stop inflating the `fresh` count (a new value alongside `clarify`; the
+dashboard's Fresh/Cache filters do not match it, "All" does).
+
+`Build JSON (Text + Audio)` had to learn the new branch — it probes upstream
+sources by name and would otherwise have returned an empty answer whenever a
+greeting was spoken with audio on. That is the §6 fan-in rule biting again.
+
+**3. The camera splits the cache in two** — see *Still open*. Nothing was
+deleted: `evicted_keys: 0`, `expired_keys: 0`, entries growing.
 
 ### Arabic punctuation was inside the tokeniser's "word" class
 
