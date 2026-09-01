@@ -120,7 +120,6 @@
       ]
     }
   ],
-  "pinData": {},
   "connections": {
     "Read File from Disk": {
       "main": [
@@ -189,16 +188,14 @@
       ]
     }
   },
-  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "c3d85b21-22fa-4ac5-a707-e05aef2b04d7",
+  "pinData": {},
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "e45265a3a5a0e6b9ecd4cd587767717341e4aa817eccf8b5edf21577ef6b9a1b"
+    "templateCredsSetupCompleted": true
   },
   "id": "btAR6oU4MThHIYy9",
-  "tags": []
+  "versionId": "c3d85b21-22fa-4ac5-a707-e05aef2b04d7"
 }

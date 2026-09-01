@@ -7,17 +7,30 @@ cache, the Postgres analytics database, the admin dashboard, the white-label
 
 Snapshot date: 2026-08-29. Branch: `admin-dashboard-and-white-labeling`.
 
-> **Source of truth.** The *live* n8n instance is authoritative, not the
-> `*_workflow*.json` files in the repo root — those are pre-edit snapshots and
-> some are stale (e.g. `admin_dashboard_workflow.json` has 13 nodes; the live
-> Admin Dashboard API has 24). Read the live copy through the n8n REST API
-> (`GET /api/v1/workflows/<id>` with `X-N8N-API-KEY`).
+> **Source of truth.** The *live* n8n instance is authoritative. The
+> `*.json` exports in the repo root were synced from it on **2026-09-01** and
+> match it as of that date, but they are a snapshot, not the system: an edit
+> made in the n8n editor changes behaviour without touching them. Verify
+> against the live copy through the REST API
+> (`GET /api/v1/workflows/<id>` with `X-N8N-API-KEY`) before trusting a file.
+>
+> When re-syncing, take `nodes`/`connections` from **`activeVersion`** (what
+> serves traffic) but `name` and `settings` from the **top-level** object —
+> `activeVersion.name` is `null`, and exporting the top-level `nodes` gives you
+> the unpublished editor draft instead. Check `versionId == activeVersionId`
+> first; if they differ an unpublished draft exists and the two disagree.
 
-| Workflow | id | Nodes | Active |
-|---|---|---|---|
-| Agent Workflow | `d8nftRI2zhutW98L` | 43 | yes |
-| Admin Dashboard API | `9UwU0payk3rht1ms` | 24 | yes |
-| STT Webhook | `KNUv1TRbHWl3v6oS` | 5 | yes |
+| Workflow | id | Nodes | Active | Export |
+|---|---|---|---|---|
+| Agent Workflow | `d8nftRI2zhutW98L` | 43 | yes | `Agent Workflow.json` |
+| Admin Dashboard API | `9UwU0payk3rht1ms` | 25 | yes | `admin_dashboard_workflow.json` |
+| RAG workflow | `btAR6oU4MThHIYy9` | 7 | yes | `RAG workflow.json` |
+| STT Webhook | `KNUv1TRbHWl3v6oS` | 5 | yes | `STT Webhook.json` |
+
+`agent_workflow_fixed.json` (27 nodes) corresponds to no live workflow — it is
+an abandoned mid-2026 snapshot of the Agent Workflow kept under a name that
+invites mistaking it for the good copy. It was deliberately **not** refreshed;
+delete it once nothing references it.
 
 Note the instance carries duplicate names — three "STT Webhook", two "Agent
 Workflow". Match on **id**, not name, and check `active`.

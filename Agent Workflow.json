@@ -22,159 +22,6 @@
     },
     {
       "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "cond-audio",
-                    "leftValue": "={{ $binary && Object.keys($binary).length > 0 }}",
-                    "rightValue": true,
-                    "operator": {
-                      "type": "boolean",
-                      "operation": "true",
-                      "singleValue": true
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "Audio"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "cond-text",
-                    "leftValue": "={{ !$binary || Object.keys($binary).length === 0 }}",
-                    "rightValue": true,
-                    "operator": {
-                      "type": "boolean",
-                      "operation": "true",
-                      "singleValue": true
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "Text"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "31574e8b-fca1-43f8-8094-4bb251c812d9",
-      "name": "Switch (Audio or Text)",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [
-        -1200,
-        176
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  if (item.binary) {\n    const keys = Object.keys(item.binary);\n    if (keys.length > 0 && !item.binary.data0) {\n      item.binary.data0 = item.binary[keys[0]];\n    }\n    if (item.binary.data0) {\n      const buf = await this.helpers.getBinaryDataBuffer(i, 'data0');\n      item.json.audioB64 = buf.toString('base64');\n      item.json.audioMime = item.binary.data0.mimeType || 'audio/webm';\n    }\n  }\n}\nreturn items;"
-      },
-      "id": "3754db73-60d8-475c-b40e-01a2f20f4541",
-      "name": "Normalize Binary",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -976,
-        32
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "parameterType": "formBinaryData",
-              "name": "file",
-              "inputDataFieldName": "data"
-            },
-            {
-              "name": "model",
-              "value": "whisper-large-v3-turbo"
-            },
-            {
-              "name": "response_format",
-              "value": "json"
-            },
-            {}
-          ]
-        },
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "id": "da337a1b-2f94-4060-9cbe-568c5caa8f10",
-      "name": "Gemini STT",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -752,
-        32
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "3NeEadTXR21DloX6",
-          "name": "Google Gemini(PaLM) Api account"
-        },
-        "httpHeaderAuth": {
-          "id": "N3iMBOrGzdiqEOnM",
-          "name": "Header Auth account"
-        }
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "set-ut-a",
-              "name": "userText",
-              "value": "={{ $json.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '' }}",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "bf59e4bd-8a91-456e-8a09-315ff425aa08",
-      "name": "Set userText (Audio)",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -528,
-        256
-      ]
-    },
-    {
-      "parameters": {
         "assignments": {
           "assignments": [
             {
@@ -182,6 +29,18 @@
               "name": "userText",
               "value": "={{ $json.body?.text || $json.body?.chatInput || '' }}",
               "type": "string"
+            },
+            {
+              "id": "set-visitor-name",
+              "name": "visitorName",
+              "value": "={{ $('Webhook').first().json.body?.visitor?.name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-input-type",
+              "name": "inputType",
+              "type": "string",
+              "value": "={{ $json.body?.inputType === 'audio' ? 'audio' : 'text' }}"
             }
           ]
         },
@@ -198,10 +57,117 @@
     },
     {
       "parameters": {
+        "jsCode": "function simpleHash(str) {\n  let hash = 5381;\n  for (let i = 0; i < str.length; i++) {\n    hash = ((hash << 5) + hash) + str.charCodeAt(i);\n    hash = hash & hash;\n  }\n  return (hash >>> 0).toString(16);\n}\n\n// Questions whose ANSWER depends on WHO is asking. These must never share a\n// cache entry between visitors: an answer of \"you are Mariam\" stored under\n// hash(\"who am i\") would be replayed to the next person who asks it.\nconst PERSONAL = /(who am i|what'?s my name|what is my name|my name|do you know me|know who i am|recogni[sz]e me|who do you see|من انا|من أنا|ما اسمي|شو اسمي|اسمي|تعرفني|هل تعرفني|بتعرفني)/;\n\nconst items = $input.all();\nreturn items.map(item => {\n  const raw = item.json.userText || '';\n  const normalized = raw.toLowerCase().trim().replace(/[^\\w\\s\\u0600-\\u06FF]/g, '').replace(/\\s+/g, ' ');\n  const visitorName = String(item.json.visitorName || '').trim();\n  const personal = PERSONAL.test(normalized);\n\n  // Any answer produced while the agent knows a name may CONTAIN that name —\n  // it greets people it recognises, so even \"when was IUL established\" comes\n  // back as \"Hello Mariam, ...\". Such an answer can never be shared, so the\n  // key is per-visitor whenever a visitor is known, not merely when the\n  // question is personal. Measured the hard way: the first version keyed only\n  // personal questions and promptly cached a named greeting under the shared\n  // FAQ entry.\n  //\n  // Unrecognised visitors — the common case at a public desk — still share one\n  // cache entry per question, so hit rate is unaffected for them.\n  const keyBase = visitorName\n    ? normalized + '|visitor:' + visitorName.toLowerCase()\n    : normalized;\n\n  item.json.normalizedQuestion = normalized;\n  item.json.questionHash = simpleHash(keyBase);\n  item.json.isPersonalQuestion = personal;\n  item.json.visitorName = visitorName;\n  // Marked so the agent can tell camera output from user-typed text.\n  item.json.visitorContext = visitorName\n    ? '\\n\\n[kiosk camera: the person at the kiosk is ' + visitorName + ']'\n    : '';\n  item.json.startedAt = Date.now();\n  return item;\n});"
+      },
+      "id": "d1f2a3b4-1111-4a4a-9c9c-000000000001",
+      "name": "Normalize & Hash Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "cachedValue",
+        "key": "={{ 'faq:' + $json.questionHash }}",
+        "options": {}
+      },
+      "id": "d1f2a3b4-1111-4a4a-9c9c-000000000002",
+      "name": "Check Redis Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        384
+      ],
+      "credentials": {
+        "redis": {
+          "id": "Pk9dL1I9ykAW6ha3",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-cache-hit",
+              "leftValue": "={{ $json.cachedValue }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1f2a3b4-1111-4a4a-9c9c-000000000003",
+      "name": "IF (Cache Hit?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        16,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let parsed = {};\ntry { parsed = JSON.parse($json.cachedValue); } catch (e) { parsed = {}; }\nconst rawText = $('Normalize & Hash Question').first().json.userText;\nreturn [{\n  json: {\n    answer: parsed.answer || '',\n    question: parsed.question || rawText,\n    rawQuestion: parsed.rawQuestion || '',\n    corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],\n    wantsAudio: String($('Webhook').item.json.body?.wantsAudio) !== 'false',\n    matchType: ($('Fetch Semantic Hit').isExecuted ? 'semantic_hit' : 'cache_hit'),\n    audioBase64: parsed.audioBase64 || '',\n    audioMime: parsed.audioMime || ''\n  }\n}];"
+      },
+      "id": "d1f2a3b4-1111-4a4a-9c9c-000000000004",
+      "name": "Parse Cached Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'faq:' + $('Normalize & Hash Question').first().json.questionHash }}",
+        "value": "={{ JSON.stringify({ answer: $json.answer, audioBase64: $json.audioBase64 || '', audioMime: $json.audioMime || '', question: $json.question, rawQuestion: ($('Correct Domain Terms').isExecuted ? ($('Correct Domain Terms').first().json.userTextRaw || '') : ''), corrections: ($('Correct Domain Terms').isExecuted ? ($('Correct Domain Terms').first().json.corrections || []) : []) }) }}",
+        "expire": true,
+        "ttl": 2592000
+      },
+      "id": "d1f2a3b4-1111-4a4a-9c9c-000000000005",
+      "name": "Save to Redis Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        576,
+        864
+      ],
+      "credentials": {
+        "redis": {
+          "id": "Pk9dL1I9ykAW6ha3",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "promptType": "define",
-        "text": "=user message :\n{{ $json.userText }}",
+        "text": "=user message :\n{{ $('Correct Domain Terms').first().json.userText }}\n{{ $('Normalize & Hash Question').first().json.visitorContext }}",
         "options": {
-          "systemMessage": "You are a friendly bilingual AI receptionist for the Islamic University of Lebanon (IUL) and the HAICI center.\n\nLANGUAGE RULES:\n\nDetect the language of the user's latest message and always write your final answer in that same language. If they write in Arabic, answer in clear, natural Modern Standard Arabic; if in English, answer in English.\n\nTOOL USAGE RULES:\n\nFor greetings, small talk, thanks, goodbyes, reply directly without searching.\nFor any factual question about IUL, use the knowledge base below first before answering.\nKeep answers concise, two to four sentences maximum.\nNo markdown, no bullet points, no asterisks. Use natural spoken language only.\n\nKNOWLEDGE BASE:\nIUL was established in 1996 by Presidential Decree No. 8600. Founded by Imam Sayyed Moussa El-Sader, executed by Imam Sheikh Mohammad Mahdi Shams Al-Din, expanded by Imam Sheikh Abdul Amir Qablan. Current president: Professor Dr. Hassan Al-Laqis. Motto: A University for all country citizens and the Arab world. Website: www.iul.edu.lb. Phone: 05/807711-16. Email: iul@iul.edu.lb. Accredited by HCERES (France). Ranked #1001-1200 globally (QS). Top 100 Arab region.\n\nCAMPUSES: Khaldeh (main campus, south of Beirut, headquarters); Wardanieh (Chouf District, Engineering, HAICI center); Tyre/Sour (South Lebanon, 3380 students); Baalbek (Bekaa Valley, opened 2014); Majdal Balhiss/Sahmar (license pending); Bourj El Barajneh (license pending). Student population: Khaldeh 2504, Wardanieh 1812, Tyre 3380, Baalbek 1665.\n\nFACULTIES: Engineering (Computer & Communications, Surveying, Biomedical, Civil - 5 year diploma, Wardanieh campus. First in Lebanon to offer Biomedical and Surveying Engineering). Law (License, Master, PhD). Economics and Business Administration (Management, Marketing, Accounting, MIS, Banking, MBA). Sciences and Arts (Graphic Design, Computer Science, Biology, Interior Design, Math, Chemistry). Letters and Human Sciences (Psychology, Languages, Translation, Geography, History, Philosophy). Public Health (Nursing, Speech Therapy, Physical Therapy, Lab Sciences). Tourism Sciences (Hotel Management, Travel and Airline Services). Islamic Studies (Islamic Sciences, Sharia). Political Administrative and Diplomatic Sciences (Political Science, International Relations).\n\nADMISSIONS: Fall deadline August 30. Spring deadline January 15. Required documents for Bachelor's: ID copy, 2 passport photos, secondary school grades, Lebanese Baccalaureate or equivalent certified by Ministry of Education, Social Security certificate. For Master's: add university transcripts, 2 recommendation letters, personal statement, CV. Students not officially registered until course fees are paid.\n\nACADEMIC SYSTEM: Uses European ECTS credit system. Bachelor's 3-5 years. Master's 2-4 years. PhD 3-5 years (180 ECTS). Passing grade: 10/20 general, 12/20 for Engineering. Attendance: 70% minimum for lectures, 90% for labs. Academic year: Fall (September to January), Spring (February to June), optional Summer session.\n\nSCHOLARSHIPS: Merit-Based (top high school students), Athletic Scholarships, Financial Aid Plans for students with financial need.\n\nHAICI: Humanity-AI Driven Center for Innovation, located at Wardanieh campus. Head: Dr. Rodayna Hmede. Teams: IT and Technical, Social Media and Marketing (co-led by Mariam Hassan Badawi), Research and Development, Event and Project Management. Initiatives: National Youth Strategy 2026-2030, Designing Hope in Action Hackathon, AI workshops and seminars. Projects include the IUL AI Receptionist - a bilingual Arabic/English conversational assistant.\n\nSTUDENT SERVICES: Language Center (English, French, and 10+ other languages, partners with British Council and Institut Français). Career Center (job fairs, CV help, employer connections). Over 30 student clubs. Engineering graduates eligible for Order of Engineers. Law graduates eligible for Bar Association."
+          "systemMessage": "You are a friendly bilingual AI receptionist for the Islamic University of Lebanon (IUL) and the HAICI center.\n\nLANGUAGE RULES:\n\nDetect the language of the user's latest message and always write your final answer in that same language. If they write in Arabic, answer in clear, natural Modern Standard Arabic; if in English, answer in English.\n\nTOOL USAGE RULES:\n\nFor greetings, small talk, thanks, goodbyes, reply directly without searching.\nFor any factual question about IUL, use the knowledge base below first before answering.\nKeep answers very short: one to three sentences, and never more than about 250 characters. Your answer is read aloud by a speech engine, so every extra word adds delay. Answer only what was asked; do not volunteer extra facts.\nNo markdown, no bullet points, no asterisks. Use natural spoken language only.\n\nKNOWLEDGE BASE:\nIUL was established in 1996 by Presidential Decree No. 8600. Founded by Imam Sayyed Moussa El-Sader, executed by Imam Sheikh Mohammad Mahdi Shams Al-Din, expanded by Imam Sheikh Abdul Amir Qablan. Current president: Professor Dr. Hassan Al-Laqis. Motto: A University for all country citizens and the Arab world. Website: www.iul.edu.lb. Phone: 05/807711-16. Email: iul@iul.edu.lb. Accredited by HCERES (France). Ranked #1001-1200 globally (QS). Top 100 Arab region.\n\nCAMPUSES: Khaldeh (main campus, south of Beirut, headquarters); Wardanieh (Chouf District, Engineering, HAICI center); Tyre/Sour (South Lebanon, 3380 students); Baalbek (Bekaa Valley, opened 2014); Majdal Balhiss/Sahmar (license pending); Bourj El Barajneh (license pending). Student population: Khaldeh 2504, Wardanieh 1812, Tyre 3380, Baalbek 1665.\n\nFACULTIES: Engineering (Computer & Communications, Surveying, Biomedical, Civil - 5 year diploma, Wardanieh campus. First in Lebanon to offer Biomedical and Surveying Engineering). Law (License, Master, PhD). Economics and Business Administration (Management, Marketing, Accounting, MIS, Banking, MBA). Sciences and Arts (Graphic Design, Computer Science, Biology, Interior Design, Math, Chemistry). Letters and Human Sciences (Psychology, Languages, Translation, Geography, History, Philosophy). Public Health (Nursing, Speech Therapy, Physical Therapy, Lab Sciences). Tourism Sciences (Hotel Management, Travel and Airline Services). Islamic Studies (Islamic Sciences, Sharia). Political Administrative and Diplomatic Sciences (Political Science, International Relations).\n\nADMISSIONS: Fall deadline August 30. Spring deadline January 15. Required documents for Bachelor's: ID copy, 2 passport photos, secondary school grades, Lebanese Baccalaureate or equivalent certified by Ministry of Education, Social Security certificate. For Master's: add university transcripts, 2 recommendation letters, personal statement, CV. Students not officially registered until course fees are paid.\n\nACADEMIC SYSTEM: Uses European ECTS credit system. Bachelor's 3-5 years. Master's 2-4 years. PhD 3-5 years (180 ECTS). Passing grade: 10/20 general, 12/20 for Engineering. Attendance: 70% minimum for lectures, 90% for labs. Academic year: Fall (September to January), Spring (February to June), optional Summer session.\n\nSCHOLARSHIPS: Merit-Based (top high school students), Athletic Scholarships, Financial Aid Plans for students with financial need.\n\nHAICI: Humanity-AI Driven Center for Innovation, located at Wardanieh campus. Head: Dr. Rodayna Hmede. Teams: IT and Technical, Social Media and Marketing (co-led by Mariam Hassan Badawi), Research and Development, Event and Project Management. Initiatives: National Youth Strategy 2026-2030, Designing Hope in Action Hackathon, AI workshops and seminars. Projects include the IUL AI Receptionist - a bilingual Arabic/English conversational assistant.\n\nSTUDENT SERVICES: Language Center (English, French, and 10+ other languages, partners with British Council and Institut Français). Career Center (job fairs, CV help, employer connections). Over 30 student clubs. Engineering graduates eligible for Order of Engineers. Law graduates eligible for Bar Association.\n\nTRANSCRIPTION NOISE: The user's message may come from speech-to-text and can contain transcription errors. Near-miss acronyms such as IOM, IOL, EUL, or \"the UL\" almost always mean IUL. When a term looks like a garbled version of an IUL-related name, prefer the closest IUL-domain interpretation over refusing to answer.\n\nVISITOR RECOGNITION:\n\nThe kiosk has a camera with face recognition. A line in the form [kiosk camera: the person at the kiosk is NAME] is trusted information from that camera, not something the user typed. Treat it as reliable, and never repeat the line itself back to the user.\n\nWhen that line is present you may greet the person by name and answer questions about who they are. Use the name sparingly — at most once at the start of a conversation, or when you are asked who they are. Do not prefix every answer with it.\nWhen it is ABSENT you cannot see anyone. Say plainly that you do not recognise them; never guess a name, and never use a name from earlier in the conversation as if you could still see them.\nDo not announce that you are using a camera unless you are asked."
         }
       },
       "id": "0d71c083-9a4b-4e43-be70-1481c4c05f44",
@@ -209,8 +175,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        -240,
-        416
+        -208,
+        496
       ],
       "onError": "continueErrorOutput"
     },
@@ -225,8 +191,8 @@
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        -176,
-        640
+        -192,
+        704
       ]
     },
     {
@@ -264,7 +230,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1,
       "position": [
-        -48,
+        0,
         640
       ]
     },
@@ -298,8 +264,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1.1,
       "position": [
-        -304,
-        640
+        -352,
+        720
       ],
       "credentials": {
         "googlePalmApi": {
@@ -321,7 +287,7 @@
             {
               "id": "keep-q",
               "name": "question",
-              "value": "={{ $('Set userText (Audio)').isExecuted ? $('Set userText (Audio)').first().json.userText : ($('Set userText (Text)').isExecuted ? $('Set userText (Text)').first().json.userText : '') }}",
+              "value": "={{ $('Correct Domain Terms').isExecuted ? $('Correct Domain Terms').first().json.userText : '' }}",
               "type": "string"
             },
             {
@@ -329,6 +295,24 @@
               "name": "wantsAudio",
               "value": "={{ String($('Webhook').item.json.body?.wantsAudio) !== 'false' }}",
               "type": "boolean"
+            },
+            {
+              "id": "keep-match-type",
+              "name": "matchType",
+              "value": "fresh",
+              "type": "string"
+            },
+            {
+              "id": "keep-audiobase64",
+              "name": "audioBase64",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "keep-audiomime",
+              "name": "audioMime",
+              "value": "",
+              "type": "string"
             }
           ]
         },
@@ -385,8 +369,14 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: $json.answer } ] } ], generationConfig: { responseModalities: [\"AUDIO\"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: \"Kore\" } } } } }) }}",
+        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: $json.text } ] } ], generationConfig: { responseModalities: [\"AUDIO\"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: \"Kore\" } } } } }) }}",
         "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 0
+            }
+          },
           "timeout": 60000
         }
       },
@@ -410,7 +400,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const answer = $('Keep Answer Text').first().json.answer;\nconst question = $('Keep Answer Text').first().json.question;\n\n// Gemini TTS returns base64 PCM (signed 16-bit LE, mono) in inlineData.\nconst part = $json.candidates?.[0]?.content?.parts?.[0];\nconst pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\nif (!pcmB64) {\n  return [{ json: { answer, question: question || '', audioMime: '', audioBase64: '' } }];\n}\nconst mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\nconst m = mime.match(/rate=(\\d+)/);\nconst sampleRate = m ? parseInt(m[1], 10) : 24000;\nconst channels = 1, bitsPerSample = 16;\nconst pcm = Buffer.from(pcmB64, 'base64');\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + pcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(pcm.length, 40);\nconst wav = Buffer.concat([h, pcm]);\n\nreturn [{ json: { answer, question: question || '', audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];"
+        "jsCode": "\n// Aggregate all TTS chunk outputs, concatenate PCM, insert silence between chunks,\n// then wrap in a single WAV container.\n\n// The answer can arrive from any of three upstream branches: a fresh agent\n// answer, a clarification reply, or a cache hit. Referencing a node that did\n// not execute THROWS, so probe rather than assume which one ran — and degrade\n// to an empty answer instead of failing the whole turn if none of them did.\nfunction pickSource(name) {\n  try {\n    return $(name).isExecuted ? $(name).first().json : null;\n  } catch (e) {\n    return null;\n  }\n}\nconst source = pickSource('Keep Answer Text')\n  || pickSource('Build Clarification Reply')\n  || pickSource('Parse Cached Response')\n  || {};\nconst answer = source.answer || '';\nconst question = source.question || '';\n\n// Graceful no-audio fallback\nconst NO_AUDIO = [{ json: { answer, question, audioMime: '', audioBase64: '' } }];\n\n// Collect all items, sorted by chunkIndex\nconst items = $input.all();\nif (!items || items.length === 0) return NO_AUDIO;\n\n// Sort by chunkIndex (should already be in order, but be safe)\nitems.sort((a, b) => (a.json.chunkIndex ?? 0) - (b.json.chunkIndex ?? 0));\n\n// Extract PCM buffers and sample rates from each chunk\nconst pcmBuffers = [];\nconst sampleRates = [];\n\nfor (const item of items) {\n  const cands = item.json.candidates;\n  if (!cands || !cands[0] || !cands[0].content || !cands[0].content.parts || !cands[0].content.parts[0]) {\n    // Missing audio data for this chunk — degrade gracefully\n    return NO_AUDIO;\n  }\n  const part = cands[0].content.parts[0];\n  const pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\n  if (!pcmB64) return NO_AUDIO;\n\n  const mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\n  const m = mime.match(/rate=(\\d+)/);\n  const sr = m ? parseInt(m[1], 10) : 24000;\n\n  pcmBuffers.push(Buffer.from(pcmB64, 'base64'));\n  sampleRates.push(sr);\n}\n\n// Verify all chunks have the same sample rate; if not, fall back to first chunk only\nconst baseSampleRate = sampleRates[0];\nconst allSameRate = sampleRates.every(r => r === baseSampleRate);\n\nlet combinedPcm;\nif (!allSameRate) {\n  // Sample rate mismatch — use only first chunk to avoid garbled audio\n  combinedPcm = pcmBuffers[0];\n} else if (pcmBuffers.length === 1) {\n  combinedPcm = pcmBuffers[0];\n} else {\n  // Insert ~150ms silence (zero-filled 16-bit mono PCM) between chunks\n  const silenceByteCount = Math.round(baseSampleRate * 0.15) * 2; // 16-bit = 2 bytes/sample\n  const silence = Buffer.alloc(silenceByteCount, 0);\n\n  const parts = [];\n  for (let i = 0; i < pcmBuffers.length; i++) {\n    parts.push(pcmBuffers[i]);\n    if (i < pcmBuffers.length - 1) parts.push(silence);\n  }\n  combinedPcm = Buffer.concat(parts);\n}\n\n// Build 44-byte WAV header (mono, 16-bit LE)\nconst sampleRate = baseSampleRate;\nconst channels = 1;\nconst bitsPerSample = 16;\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\n\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + combinedPcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);          // PCM format\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(combinedPcm.length, 40);\n\nconst wav = Buffer.concat([h, combinedPcm]);\n\nreturn [{ json: { answer, question, audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];\n"
       },
       "id": "e55d005f-da8d-47c5-b7ea-56b46c009b98",
       "name": "Build JSON (Text + Audio)",
@@ -533,55 +523,781 @@
           "name": "Google Gemini(PaLM) Api account"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "function simpleHash(str) {\n  let hash = 5381;\n  for (let i = 0; i < str.length; i++) {\n    hash = ((hash << 5) + hash) + str.charCodeAt(i);\n    hash = hash & hash;\n  }\n  return (hash >>> 0).toString(16);\n}\n\n// Greeting / small-talk phrases (EN + AR). Matched on word/phrase boundaries\n// (padded with spaces) so short tokens like \"hi\" don't match inside other\n// words (e.g. \"history\"). Tune this list as real traffic comes in.\nconst GREETING_PHRASES = [\n  'hello', 'hi', 'hey', 'good morning', 'good evening', 'good afternoon',\n  'thanks', 'thank you', 'bye', 'goodbye',\n  'مرحبا', 'السلام عليكم', 'أهلا', 'شكرا', 'مع السلامة', 'صباح الخير', 'مساء الخير'\n];\n\n// Non-answer / \"I don't know\" phrases the model tends to emit (EN + AR).\n// Matched as plain substrings against the lowercased answer. Tune this list\n// as real traffic comes in.\nconst UNKNOWN_PHRASES = [\n  \"i don't have\", \"i do not have\", \"i'm not sure\", \"i am not sure\",\n  \"no information\", \"not available\", \"cannot find\", \"can't find\",\n  \"couldn't find\", \"unable to find\", \"don't know\", \"do not know\",\n  \"no data\", \"please contact\", \"i'm sorry\",\n  \"لا أملك\", \"لا أعرف\", \"لا تتوفر\", \"غير متوفر\", \"لا يوجد\", \"لم أجد\", \"يرجى التواصل\", \"عذرا\",\n  // Scope-refusal phrasing observed in real answers (model has no fixed fallback sentence).\n  \"i am sorry\", \"i can only\", \"i can only provide\", \"i can only answer\", \"i can only help\",\n  \"outside my scope\", \"outside of my scope\",\n  \"يمكنني فقط\", \"أستطيع فقط\", \"خارج نطاق\"\n];\n\nfunction isGreeting(text) {\n  const padded = ' ' + String(text || '').toLowerCase().trim() + ' ';\n  return GREETING_PHRASES.some(p => padded.includes(' ' + p + ' ') || padded.trim() === p);\n}\n\nconst items = $input.all();\n\nreturn items.map(item => {\n  // --- core fields (unchanged behavior) ---\n  let answer = '';\n  let question = '';\n  let matchType = 'fresh';\n  try { answer = item.json.answer || ''; } catch (e) { answer = ''; }\n  try { question = item.json.question || ''; } catch (e) { question = ''; }\n  try { matchType = item.json.matchType || 'fresh'; } catch (e) { matchType = 'fresh'; }\n\n  const normalizedAnswer = answer.toLowerCase().trim().replace(/\\s+/g, ' ');\n\n  // The client tags each turn's origin (sendChat in web/src/lib/api.ts), because\n  // speech arrives here already transcribed and is otherwise indistinguishable\n  // from typing. Anything absent or unrecognised reads as 'text'.\n  let inputType = 'text';\n  try {\n    inputType = $('Set userText (Text)').first().json.inputType === 'audio'\n      ? 'audio'\n      : 'text';\n  } catch (e) {\n    inputType = 'text';\n  }\n\n  let respondedWithAudio = false;\n  try { respondedWithAudio = !!item.json.wantsAudio; } catch (e) { respondedWithAudio = false; }\n\n  // --- new fields (all guarded — this node must never throw) ---\n\n  // sessionId from the webhook body (works for both JSON and multipart turns)\n  let sessionId = null;\n  try {\n    sessionId = $('Webhook').first().json.body?.sessionId || null;\n  } catch (e) {\n    sessionId = null;\n  }\n\n  // rawQuestion / corrections from Correct Domain Terms (typo-tolerance layer)\n  let rawQuestion = '';\n  let corrections = [];\n  try {\n    const cdt = $('Correct Domain Terms').first().json;\n    rawQuestion = cdt.userTextRaw || '';\n    corrections = Array.isArray(cdt.corrections) ? cdt.corrections : [];\n  } catch (e) {\n    // Cache-hit path: Correct Domain Terms never ran. Fall back to the\n    // fields Parse Cached Response now surfaces from the cached blob.\n    try {\n      rawQuestion = item.json.rawQuestion || '';\n      corrections = Array.isArray(item.json.corrections) ? item.json.corrections : [];\n    } catch (e2) {\n      rawQuestion = '';\n      corrections = [];\n    }\n  }\n\n  // questionHash / normalizedQuestion / startedAt from Normalize & Hash Question\n  let questionHash = null;\n  let normalizedQuestion = null;\n  let startedAt = null;\n  try {\n    const normJson = $('Normalize & Hash Question').first().json;\n    questionHash = normJson.questionHash || null;\n    normalizedQuestion = normJson.normalizedQuestion || null;\n  } catch (e) {\n    questionHash = null;\n    normalizedQuestion = null;\n  }\n  try {\n    // Prefer the branch-specific start mark (captures Groq STT time on\n    // voice turns); fall back to Normalize & Hash Question's own\n    // startedAt if the branch value is unavailable (e.g. mid-deploy).\n    // Single start mark. The branch-specific mark existed to capture Groq STT\n    // time on voice turns; transcription now happens in the separate STT Webhook\n    // workflow, so this figure excludes it.\n    const normJson2 = $('Normalize & Hash Question').first().json;\n    startedAt = typeof normJson2.startedAt === 'number' ? normJson2.startedAt : null;\n  } catch (e) {\n    startedAt = null;\n  }\n\n  // latencyMs — never negative/garbage; null when we can't compute it\n  let latencyMs = null;\n  try {\n    if (typeof startedAt === 'number' && !Number.isNaN(startedAt)) {\n      const diff = Date.now() - startedAt;\n      latencyMs = (Number.isFinite(diff) && diff >= 0) ? diff : null;\n    }\n  } catch (e) {\n    latencyMs = null;\n  }\n\n  // intent — greeting/small-talk vs a real question\n  let intent = 'question';\n  try {\n    intent = isGreeting(normalizedQuestion || question) ? 'greeting' : 'question';\n  } catch (e) {\n    intent = 'question';\n  }\n\n  // language — Arabic script detected in the question\n  let language = 'en';\n  try {\n    language = /[\\u0600-\\u06FF]/.test(question) ? 'ar' : 'en';\n  } catch (e) {\n    language = 'en';\n  }\n\n  // isUnknown — only for real questions; greetings are never unknown\n  let isUnknown = false;\n  try {\n    if (intent === 'question') {\n      const a = answer.trim();\n      if (a === '') {\n        isUnknown = true;\n      } else {\n        const aLower = a.toLowerCase();\n        isUnknown = UNKNOWN_PHRASES.some(p => aLower.includes(p.toLowerCase()));\n      }\n    }\n  } catch (e) {\n    isUnknown = false;\n  }\n\n  return {\n    json: {\n      timestamp: new Date().toISOString(),\n      inputType,\n      question,\n      answer,\n      respondedWithAudio,\n      matchType,\n      answerHash: simpleHash(normalizedAnswer),\n      sessionId,\n      questionHash,\n      normalizedQuestion,\n      latencyMs,\n      isUnknown,\n      intent,\n      language,\n      rawQuestion,\n      corrections\n    }\n  };\n});"
+      },
+      "id": "b1a5f8b2-6d2a-4c3d-9c6f-1a0e5d7f2c11",
+      "name": "Anonymize Log Entry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "receptionist_session_logs",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "input_type": "={{ $json.inputType }}",
+            "question": "={{ $json.question }}",
+            "answer": "={{ $json.answer }}",
+            "responded_with_audio": "={{ $json.respondedWithAudio }}",
+            "match_type": "={{ $json.matchType }}",
+            "answer_hash": "={{ $json.answerHash }}",
+            "session_id": "={{ $json.sessionId }}",
+            "question_hash": "={{ $json.questionHash }}",
+            "normalized_question": "={{ $json.normalizedQuestion }}",
+            "latency_ms": "={{ $json.latencyMs }}",
+            "is_unknown": "={{ $json.isUnknown }}",
+            "intent": "={{ $json.intent }}",
+            "language": "={{ $json.language }}",
+            "raw_question": "={{ $json.rawQuestion }}",
+            "corrections": "={{ JSON.stringify($json.corrections) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "input_type",
+              "displayName": "input_type",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "question",
+              "displayName": "question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer",
+              "displayName": "answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "responded_with_audio",
+              "displayName": "responded_with_audio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "match_type",
+              "displayName": "match_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer_hash",
+              "displayName": "answer_hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "question_hash",
+              "displayName": "question_hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "normalized_question",
+              "displayName": "normalized_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "latency_ms",
+              "displayName": "latency_ms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_unknown",
+              "displayName": "is_unknown",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "intent",
+              "displayName": "intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "language",
+              "displayName": "language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "raw_question",
+              "displayName": "raw_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "corrections",
+              "displayName": "corrections",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c2b6a9c3-7e3b-4d4e-ad7f-2b1f6e8d3d22",
+      "name": "Log Session (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pBEr4vwito39rUaR",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-wants-audio-2",
+              "leftValue": "={{ $json.wantsAudio }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cond-no-cached-audio",
+              "leftValue": "={{ $json.audioBase64 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a907d213-8661-4c53-90c4-87a3415c38ec",
+      "name": "IF (needs TTS?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'faq:' + $('Normalize & Hash Question').first().json.questionHash }}",
+        "value": "={{ JSON.stringify({ answer: $json.answer, audioBase64: $json.audioBase64, audioMime: $json.audioMime, question: $json.question, rawQuestion: ($('Correct Domain Terms').isExecuted ? ($('Correct Domain Terms').first().json.userTextRaw || '') : ''), corrections: ($('Correct Domain Terms').isExecuted ? ($('Correct Domain Terms').first().json.corrections || []) : []) }) }}",
+        "expire": true,
+        "ttl": 2592000,
+        "options": {}
+      },
+      "id": "9ae31637-ece5-4151-b164-e16e9290ba25",
+      "name": "Save Audio to Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        160
+      ],
+      "credentials": {
+        "redis": {
+          "id": "Pk9dL1I9ykAW6ha3",
+          "name": "Redis account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split the answer into up to MAX_CHUNKS balanced chunks for parallel TTS.\n// Strategy: mask spans we must never split inside (URLs, emails, abbreviations,\n// decimals), split on sentence-ending punctuation, then unmask and balance.\nconst MAX_CHUNKS = 4;\nconst MIN_CHUNK_CHARS = 40;\nconst MIN_SPLIT_CHARS = 100; // below this, splitting costs more overhead than it saves\n\nconst answer = String($json.answer || '').trim();\n\nif (answer.length < MIN_SPLIT_CHARS) {\n  return [{ json: { chunkIndex: 0, text: answer, totalChunks: 1 } }];\n}\n\nconst PROTECT = [\n  /\\b(?:https?:\\/\\/|www\\.)\\S+/gi,\n  /\\b[\\w.+-]+@[\\w-]+\\.[\\w.]+/gi,\n  /\\b(?:Dr|Prof|Mr|Mrs|Ms|Jr|Sr|St|No|vs|etc|Inc|Ltd|approx|Fig|Vol)\\./gi,\n  /\\b\\d+\\.\\d+/g,\n];\n\n// Private-use sentinels so placeholders can never collide with real digits in\n// the text (a plain \" 12 \" placeholder would match years like \" 1996 \").\nconst stash = [];\nlet masked = answer;\nfor (const re of PROTECT) {\n  masked = masked.replace(re, (m) => '' + (stash.push(m) - 1) + '');\n}\n\n// Sentence end = . ! ? or Arabic question mark (U+061F), followed by whitespace\n// or end of string. Arabic comma (U+060C) is deliberately NOT a sentence end.\nconst rawParts = [];\nlet start = 0;\nconst sentenceEnd = /[.!?؟]/g;\nlet m;\nwhile ((m = sentenceEnd.exec(masked)) !== null) {\n  const next = masked[m.index + 1];\n  if (next === undefined || /\\s/.test(next)) {\n    rawParts.push(masked.slice(start, m.index + 1));\n    start = m.index + 1;\n  }\n}\nif (start < masked.length) rawParts.push(masked.slice(start));\n\nconst unmask = (s) => s.replace(/(\\d+)/g, (_, i) => stash[Number(i)]);\nconst sentences = rawParts.map(unmask).map((s) => s.trim()).filter(Boolean);\n\nif (sentences.length <= 1) {\n  return [{ json: { chunkIndex: 0, text: answer, totalChunks: 1 } }];\n}\n\n// Wall-clock for the parallel fan-out is the LONGEST chunk, not the total, so\n// partition to minimise the maximum chunk size (classic linear-partition DP).\n// Greedy packing overshoots and leaves lopsided chunks like 237/157.\nconst n = sentences.length;\nconst k = Math.min(MAX_CHUNKS, n);\nconst prefix = [0];\nfor (let i = 0; i < n; i++) prefix.push(prefix[i] + sentences[i].length);\n\nconst dp = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(Infinity));\nconst cut = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(0));\ndp[0][0] = 0;\nfor (let i = 1; i <= n; i++) {\n  for (let j = 1; j <= k; j++) {\n    for (let p = j - 1; p < i; p++) {\n      const worst = Math.max(dp[p][j - 1], prefix[i] - prefix[p]);\n      if (worst < dp[i][j]) {\n        dp[i][j] = worst;\n        cut[i][j] = p;\n      }\n    }\n  }\n}\n\nconst bounds = [n];\nlet i = n;\nfor (let j = k; j > 0; j--) {\n  bounds.unshift(cut[i][j]);\n  i = cut[i][j];\n}\n\nconst chunks = [];\nfor (let b = 0; b < bounds.length - 1; b++) {\n  const piece = sentences.slice(bounds[b], bounds[b + 1]).join(' ').trim();\n  if (piece) chunks.push(piece);\n}\n\n// Fold away chunks too small to be worth their own request.\nfor (let i = 0; i < chunks.length && chunks.length > 1; ) {\n  if (chunks[i].length < MIN_CHUNK_CHARS) {\n    if (i < chunks.length - 1) chunks[i + 1] = chunks[i] + ' ' + chunks[i + 1];\n    else chunks[i - 1] = chunks[i - 1] + ' ' + chunks[i];\n    chunks.splice(i, 1);\n  } else i++;\n}\n\nreturn chunks.map((text, idx) => ({\n  json: { chunkIndex: idx, text, totalChunks: chunks.length },\n}));\n"
+      },
+      "id": "chunk-splitter-001",
+      "name": "Split Answer Into Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "clar-answer",
+              "name": "answer",
+              "value": "={{ $json.clarifyPrompt }}",
+              "type": "string"
+            },
+            {
+              "id": "clar-question",
+              "name": "question",
+              "value": "={{ $json.userTextRaw }}",
+              "type": "string"
+            },
+            {
+              "id": "clar-wants-audio",
+              "name": "wantsAudio",
+              "value": "={{ String($('Webhook').item.json.body?.wantsAudio) !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "clar-match-type",
+              "name": "matchType",
+              "value": "clarify",
+              "type": "string"
+            },
+            {
+              "id": "clar-audiobase64",
+              "name": "audioBase64",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "clar-audiomime",
+              "name": "audioMime",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f1a2b3c4-0004-4a4a-9c9c-typolex00004",
+      "name": "Build Clarification Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        592,
+        700
+      ]
+    },
+    {
+      "id": "d08f66f1-f4bb-4981-8e68-7a49d234b5bb",
+      "name": "Check Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        1250
+      ],
+      "parameters": {
+        "jsCode": "const raw = $json.candidates?.[0]?.content?.parts?.[0]?.text || '';\nconst verdict = raw.trim().toUpperCase();\n// A blank/failed judge reply must fall through to the agent, not serve a hit.\nconst isSame = verdict.includes('SAME') && !verdict.includes('DIFFERENT');\nconst lookup = $('Semantic Lookup').first().json;\nreturn [{ json: {\n  isSame,\n  verdict: verdict || '(empty)',\n  candidateHash: lookup.candidateHash || '',\n  candidateScore: lookup.candidateScore,\n} }];"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ============================================================================\n// Correct Domain Terms - core matcher logic.\n// This file is the literal body that goes into the n8n Code node\n// \"Correct Domain Terms\" (mode: Run Once for All Items), with a thin n8n\n// glue wrapper appended at the bottom (guarded so it never runs under bun).\n// ============================================================================\n\nconst DEFAULT_LEXICON = {\n  \"version\": 1,\n  \"updatedAt\": \"2026-08-23T00:00:00Z\",\n  \"thresholds\": { \"autoApply\": 0.86, \"clarify\": 0.72, \"gap\": 0.08, \"minFuzzyLen\": 5 },\n  \"stoplist\": [\"where\",\"when\",\"what\",\"which\",\"who\",\"why\",\"how\",\"the\",\"is\",\"are\",\"a\",\"an\",\"of\",\"in\",\"on\",\"at\",\"to\",\"for\",\"and\",\"or\",\"do\",\"does\",\"i\",\"need\",\"can\",\"you\",\"tell\",\"me\",\"about\",\"from\",\"with\",\"that\",\"this\",\"it\",\"my\",\"your\"],\n  \"terms\": [\n    { \"canonical\": \"IUL\", \"aliases\": [\"iom\",\"i o m\",\"ioul\",\"eul\",\"ewl\",\"yul\",\"i u l\",\"the ul\",\"aol\",\"ayol\",\"iyul\",\"aiul\",\"a u l\",\"the yul\",\"iull\",\"uil\",\"iu\",\"ul\",\"ilu\"], \"fuzzy\": false },\n    { \"canonical\": \"الجامعة الإسلامية في لبنان\", \"aliases\": [\"الجامعة الاسلامية في لبنان\",\"الجامعه الاسلاميه\"], \"fuzzy\": false },\n    { \"canonical\": \"HAICI\", \"aliases\": [\"hi ci\",\"hi see\",\"hyacy\",\"haasi\",\"ha ici\",\"high see\",\"hoisy\",\"hi c\",\"hey see\",\"hisci\",\"hi sci\",\"high sci\"], \"fuzzy\": true },\n    { \"canonical\": \"Khaldeh\", \"aliases\": [\"khalde\",\"kalde\",\"haldeh\",\"khaldia\",\"cald day\",\"kaldeh\"], \"fuzzy\": true },\n    { \"canonical\": \"خلدة\", \"aliases\": [\"خلده\",\"خالده\"], \"fuzzy\": true },\n    { \"canonical\": \"Wardanieh\", \"aliases\": [\"wardania\",\"wardaniyeh\",\"verdania\",\"wardanya\",\"warda nia\",\"wardaniya\"], \"fuzzy\": true },\n    { \"canonical\": \"الوردانية\", \"aliases\": [\"الورداني\",\"الورضانية\"], \"fuzzy\": true },\n    { \"canonical\": \"Tyre\", \"aliases\": [\"sour\",\"soor\",\"tayr\",\"tire\",\"sor\",\"soure\"], \"fuzzy\": true },\n    { \"canonical\": \"صور\", \"aliases\": [\"سور\"], \"fuzzy\": true },\n    { \"canonical\": \"Baalbek\", \"aliases\": [\"baalbeck\",\"balbek\",\"baalback\",\"baalbak\",\"bal bek\",\"baal bek\"], \"fuzzy\": true },\n    { \"canonical\": \"بعلبك\", \"aliases\": [\"بعلبيك\"], \"fuzzy\": true },\n    { \"canonical\": \"Bourj El Barajneh\", \"aliases\": [\"burj barajne\",\"borj barajneh\",\"burj al barajneh\",\"borj el barajni\",\"burj barajni\"], \"fuzzy\": true },\n    { \"canonical\": \"برج البراجنة\", \"aliases\": [\"برج البراجنه\"], \"fuzzy\": true },\n    { \"canonical\": \"Majdal Balhiss\", \"aliases\": [\"majdal balhis\",\"majdal balhees\",\"majdal belhis\",\"majdel balhiss\"], \"fuzzy\": true },\n    { \"canonical\": \"Sahmar\", \"aliases\": [\"sahmar\",\"sahmer\",\"sahmir\"], \"fuzzy\": true },\n    { \"canonical\": \"Moussa El-Sader\", \"aliases\": [\"musa sadr\",\"moussa sadr\",\"musa al sadr\",\"moussa alsader\",\"musa al-sader\",\"moussa el sadr\"], \"fuzzy\": true },\n    { \"canonical\": \"Shams Al-Din\", \"aliases\": [\"shamsedin\",\"shams eddine\",\"shamseddin\",\"shams al din\",\"shamseldin\"], \"fuzzy\": true },\n    { \"canonical\": \"Abdul Amir Qablan\", \"aliases\": [\"abdul amir kablan\",\"abdulamir qablan\",\"abdel amir qablan\",\"abdul amir cablan\"], \"fuzzy\": true },\n    { \"canonical\": \"Hassan Al-Laqis\", \"aliases\": [\"hassan lakis\",\"hassan al-laqees\",\"hassan alaqis\",\"hassan al akis\",\"hassan el laqis\"], \"fuzzy\": true },\n    { \"canonical\": \"Rodayna Hmede\", \"aliases\": [\"rudayna hmaidi\",\"rodina hmede\",\"rudaina hmede\",\"rodaina hmadeh\"], \"fuzzy\": true },\n    { \"canonical\": \"HCERES\", \"aliases\": [\"h series\",\"aitch ceres\",\"h ceres\",\"aitch series\",\"hseries\"], \"fuzzy\": false },\n    { \"canonical\": \"ECTS\", \"aliases\": [\"e c t s\",\"ects\",\"eects\",\"e cts\"], \"fuzzy\": false },\n    { \"canonical\": \"Baccalaureate\", \"aliases\": [\"baccalaureat\",\"bacalaureate\",\"baccalaureah\",\"the bac\",\"bacc\",\"baccalaureah degree\"], \"fuzzy\": true },\n    { \"canonical\": \"Order of Engineers\", \"aliases\": [\"order of engineering\",\"order engineers\",\"order of the engineers\"], \"fuzzy\": true }\n  ]\n};\n\nfunction normalizeArabic(s) {\n  return String(s)\n    .replace(/[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED]/g, '') // diacritics (tashkeel), explicit non-overlapping ranges\n    .replace(/ـ/g, '')                             // tatweel\n    .replace(/[أإآ]/g, 'ا')         // hamza-alef forms -> bare alef\n    .replace(/ة/g, 'ه')                       // ta-marbuta -> ha\n    .replace(/ى/g, 'ي');                      // alef-maksura -> ya\n}\n\nfunction normToken(raw) {\n  // lowercase (no-op for Arabic) + Arabic normalization. The tokenizer's\n  // character class excludes Arabic punctuation, so tokens arrive clean.\n  return normalizeArabic(String(raw).toLowerCase());\n}\n\nfunction levenshtein(a, b) {\n  const m = a.length, n = b.length;\n  if (m === 0) return n;\n  if (n === 0) return m;\n  let prev = new Array(n + 1);\n  let curr = new Array(n + 1);\n  for (let j = 0; j <= n; j++) prev[j] = j;\n  for (let i = 1; i <= m; i++) {\n    curr[0] = i;\n    for (let j = 1; j <= n; j++) {\n      const cost = a[i - 1] === b[j - 1] ? 0 : 1;\n      curr[j] = Math.min(\n        prev[j] + 1,      // deletion\n        curr[j - 1] + 1,  // insertion\n        prev[j - 1] + cost // substitution\n      );\n    }\n    const tmp = prev; prev = curr; curr = tmp;\n  }\n  return prev[n];\n}\n\n// Coarse phonetic skeleton: first char + remaining consonants (vowels\n// dropped), used only as a small similarity booster - not a primary key.\nfunction phoneticKey(s) {\n  const str = String(s).toLowerCase();\n  if (!str) return '';\n  const first = str[0];\n  const rest = str.slice(1).replace(/[aeiou]/g, '');\n  return first + rest;\n}\n\nfunction similarity(a, b) {\n  const na = normToken(a), nb = normToken(b);\n  if (na === nb) return 1;\n  const dist = levenshtein(na, nb);\n  const maxLen = Math.max(na.length, nb.length) || 1;\n  let sim = 1 - dist / maxLen;\n  if (phoneticKey(na) === phoneticKey(nb) && phoneticKey(na) !== '') {\n    sim = Math.min(1, sim + 0.05);\n  }\n  return sim;\n}\n\n// Extract word-like tokens (Latin + Arabic) with their [start,end) offsets\n// into the ORIGINAL string, so corrections can be spliced back in without\n// disturbing any surrounding punctuation/whitespace.\nfunction tokenize(text) {\n  // U+0600-U+06FF is the whole Arabic block, punctuation included: the question\n  // mark U+061F, comma U+060C, semicolon U+061B and full stop U+06D4 all live in\n  // it. Matching the block wholesale made \"خلدة؟\" a single token, which then failed to\n  // match the alias \"خلدة\" exactly and scored into the clarify band — so a correctly\n  // spoken Arabic question came back as \"did you mean...?\". English never showed\n  // this because '?' is outside [A-Za-z]. Letters and combining marks only:\n  const re = /[A-Za-z'ؐ-ؚؠ-٩ٮ-ۓە-ۿ]+/g;\n  const tokens = [];\n  let match;\n  while ((match = re.exec(text)) !== null) {\n    tokens.push({ raw: match[0], start: match.index, end: match.index + match[0].length, norm: normToken(match[0]) });\n  }\n  return tokens;\n}\n\nfunction isArabicText(text) {\n  return /[؀-ۿ]/.test(text);\n}\n\nfunction buildClarifyPrompt(lang, heardRaw, candidateNames) {\n  if (lang === 'ar') {\n    const opts = candidateNames.length > 1 ? candidateNames.join(' أو ') : candidateNames[0];\n    let p = `سمعت \"${heardRaw}\". هل تقصد ${opts}؟ يرجى السؤال مرة أخرى.`;\n    if (p.length > 250) p = p.slice(0, 247) + '...';\n    return p;\n  }\n  const opts = candidateNames.length > 1 ? candidateNames.join(' or ') : candidateNames[0];\n  let p = `I heard \"${heardRaw}\". Did you mean ${opts}? Please ask again.`;\n  if (p.length > 250) p = p.slice(0, 247) + '...';\n  return p;\n}\n\n/**\n * Core entry point. Returns:\n * { userText, userTextRaw, corrections, needsClarification, clarifyCandidates, clarifyPrompt, lexiconSource }\n */\nfunction correctText(inputText, lexicon, lexiconSource, inputType) {\n  const text = String(inputText || '');\n  // Typed input is treated more decisively than speech: a typed near-miss is\n  // almost always a slip of the fingers, whereas a spoken near-miss can be a\n  // genuinely different word (Whisper hears \"IOM\", a real organisation).\n  // Unknown input type falls back to the conservative speech behaviour.\n  const isTyped = inputType === 'text';\n  const userTextRaw = text;\n  const th = (lexicon && lexicon.thresholds) || DEFAULT_LEXICON.thresholds;\n  const stoplist = new Set(((lexicon && lexicon.stoplist) || DEFAULT_LEXICON.stoplist).map(s => s.toLowerCase()));\n  const terms = (lexicon && Array.isArray(lexicon.terms)) ? lexicon.terms : DEFAULT_LEXICON.terms;\n\n  if (!text.trim()) {\n    return { userText: text, userTextRaw, corrections: [], needsClarification: false, clarifyCandidates: [], clarifyPrompt: '', lexiconSource };\n  }\n\n  const tokens = tokenize(text);\n  if (tokens.length === 0) {\n    return { userText: text, userTextRaw, corrections: [], needsClarification: false, clarifyCandidates: [], clarifyPrompt: '', lexiconSource };\n  }\n\n  // Build a flat alias index: normalized alias string (space-joined tokens) -> {canonical, fuzzy}\n  const aliasIndex = new Map();\n  const fuzzyAliasList = []; // { alias, canonical }\n  for (const term of terms) {\n    for (const alias of (term.aliases || [])) {\n      const normAlias = normToken(alias).trim();\n      aliasIndex.set(normAlias, { canonical: term.canonical, fuzzy: !!term.fuzzy });\n      if (term.fuzzy) fuzzyAliasList.push({ alias: normAlias, canonical: term.canonical });\n    }\n  }\n\n  const consumed = new Array(tokens.length).fill(false);\n  const corrections = [];\n  const replacements = []; // {start, end, text}\n\n  // --- Tier A: exact alias n-grams, longest (4) first ---\n  for (let n = 4; n >= 1; n--) {\n    for (let i = 0; i + n <= tokens.length; i++) {\n      if (consumed.slice(i, i + n).some(Boolean)) continue;\n      const span = tokens.slice(i, i + n);\n      const normPhrase = span.map(t => t.norm).join(' ');\n      const hit = aliasIndex.get(normPhrase);\n      if (hit) {\n        for (let k = i; k < i + n; k++) consumed[k] = true;\n        const start = span[0].start, end = span[span.length - 1].end;\n        const originalSpan = text.slice(start, end);\n        if (originalSpan.toLowerCase() !== hit.canonical.toLowerCase()) {\n          replacements.push({ start, end, text: hit.canonical });\n          corrections.push({ from: originalSpan, to: hit.canonical, score: 1.0, tier: 'A' });\n        }\n      }\n    }\n  }\n\n  // --- Tier B / Tier C: fuzzy single-token matching on remaining tokens ---\n  const clarifyCandidatesAll = [];\n  for (let i = 0; i < tokens.length; i++) {\n    if (consumed[i]) continue;\n    const tok = tokens[i];\n    if (tok.norm.length < th.minFuzzyLen) continue;\n    if (stoplist.has(tok.norm)) continue;\n\n    // Score each CANONICAL term by its best-matching alias, then rank across\n    // distinct terms. Ranking raw aliases instead lets two spellings of the\n    // same term (\"wardania\" / \"wardaniyeh\") look like an ambiguous tie, which\n    // blocked every fuzzy correction for terms carrying several aliases.\n    const bestPerTerm = new Map();\n    for (const fa of fuzzyAliasList) {\n      const sim = similarity(tok.norm, fa.alias);\n      const prev = bestPerTerm.get(fa.canonical);\n      if (prev === undefined || sim > prev) bestPerTerm.set(fa.canonical, sim);\n    }\n    let best = null, second = null;\n    for (const entry of bestPerTerm) {\n      const canonical = entry[0], sim = entry[1];\n      if (!best || sim > best.sim) { second = best; best = { sim, canonical }; }\n      else if (!second || sim > second.sim) { second = { sim, canonical }; }\n    }\n    if (!best) continue;\n\n    const gapOk = !second || (best.sim - second.sim) >= th.gap;\n\n    const autoBand = best.sim >= th.autoApply && gapOk;\n    const uncertainBand = best.sim >= th.clarify && (best.sim < th.autoApply || !gapOk);\n\n    // For typed turns the uncertain band auto-applies instead of asking; a true\n    // tie (two candidates within `gap`) still asks, on either input type.\n    if (autoBand || (uncertainBand && isTyped && gapOk)) {\n      consumed[i] = true;\n      if (tok.raw.toLowerCase() !== best.canonical.toLowerCase()) {\n        replacements.push({ start: tok.start, end: tok.end, text: best.canonical });\n        corrections.push({ from: tok.raw, to: best.canonical, score: Number(best.sim.toFixed(3)), tier: autoBand ? 'B' : 'B-typed' });\n      }\n    } else if (uncertainBand) {\n      const cands = [best.canonical];\n      if (second && second.canonical !== best.canonical) cands.push(second.canonical);\n      clarifyCandidatesAll.push({ token: tok.raw, candidates: cands.slice(0, 2), score: Number(best.sim.toFixed(3)) });\n    }\n  }\n\n  // Apply replacements (splice from the end so earlier offsets stay valid)\n  replacements.sort((a, b) => b.start - a.start);\n  let corrected = text;\n  for (const r of replacements) {\n    corrected = corrected.slice(0, r.start) + r.text + corrected.slice(r.end);\n  }\n\n  const lang = isArabicText(text) ? 'ar' : 'en';\n  let needsClarification = false;\n  let clarifyPrompt = '';\n  let clarifyCandidates = [];\n  if (clarifyCandidatesAll.length > 0) {\n    needsClarification = true;\n    const top = clarifyCandidatesAll[0];\n    clarifyCandidates = top.candidates;\n    clarifyPrompt = buildClarifyPrompt(lang, top.token, top.candidates);\n  }\n\n  return {\n    userText: needsClarification ? text : corrected, // never rewrite on a clarification turn\n    userTextRaw,\n    corrections,\n    needsClarification,\n    clarifyCandidates,\n    clarifyPrompt,\n    lexiconSource\n  };\n}\n\n// ============================================================================\n// n8n glue (this is the part that actually runs inside the Code node).\n// Guarded so requiring this file under bun for unit tests does not execute it.\n// ============================================================================\nif (typeof $input === 'undefined') {\n  if (typeof module !== 'undefined') {\n    module.exports = { correctText, DEFAULT_LEXICON, levenshtein, similarity, normalizeArabic, tokenize };\n  }\n} else {\n  const items = $input.all();\n\n  let rawUserText = '';\n  try {\n    rawUserText = $('Set userText (Text)').first().json.userText;\n  } catch (e) {\n    rawUserText = '';\n  }\n  rawUserText = rawUserText || '';\n\n  let lexicon = null;\n  let lexiconSource = 'fallback';\n  try {\n    const raw = items[0] && items[0].json ? items[0].json.value : null;\n    if (raw) {\n      lexicon = typeof raw === 'string' ? JSON.parse(raw) : raw;\n      lexiconSource = 'db';\n    }\n  } catch (e) {\n    lexicon = null;\n    lexiconSource = 'fallback';\n  }\n  if (!lexicon || !Array.isArray(lexicon.terms)) {\n    lexicon = DEFAULT_LEXICON;\n    lexiconSource = 'fallback';\n  }\n\n  // The client tags each turn's origin (sendChat in web/src/lib/api.ts), because\n  // speech arrives here already transcribed and is otherwise indistinguishable\n  // from typing. Anything absent or unrecognised reads as 'text'.\n  let inputType = 'text';\n  try {\n    inputType = $('Set userText (Text)').first().json.inputType === 'audio'\n      ? 'audio'\n      : 'text';\n  } catch (e) {\n    inputType = 'text';\n  }\n\n  let result;\n  try {\n    result = correctText(rawUserText, lexicon, lexiconSource, inputType);\n  } catch (e) {\n    result = {\n      userText: rawUserText,\n      userTextRaw: rawUserText,\n      corrections: [],\n      needsClarification: false,\n      clarifyCandidates: [],\n      clarifyPrompt: '',\n      lexiconSource: 'fallback-error'\n    };\n  }\n\n  // --- correctedHash: same djb2 + normalization as Normalize & Hash Question,\n  // copied verbatim so the two hashes can never drift apart. Used for the\n  // cache dual-write (raw hash + corrected-text hash). ---\n  function simpleHash(str) {\n    let hash = 5381;\n    for (let i = 0; i < str.length; i++) {\n      hash = ((hash << 5) + hash) + str.charCodeAt(i);\n      hash = hash & hash;\n    }\n    return (hash >>> 0).toString(16);\n  }\n  result.inputType = inputType;\n  const correctedNormalized = String(result.userText || '').toLowerCase().trim().replace(/[^\\w\\s\\u0600-\\u06FF]/g, '').replace(/\\s+/g, ' ');\n  result.correctedHash = simpleHash(correctedNormalized);\n\n  return [{ json: result }];\n}\n"
+      },
+      "id": "f1a2b3c4-0002-4a4a-9c9c-typolex00002",
+      "name": "Correct Domain Terms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        512
+      ]
+    },
+    {
+      "id": "d47d91a6-43c5-474c-8ec7-b3139b879be5",
+      "name": "Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        1250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'models/gemini-embedding-001', taskType: 'SEMANTIC_SIMILARITY', content: { parts: [{ text: $('Correct Domain Terms').first().json.userText }] } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "3NeEadTXR21DloX6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b094ef35-3a13-4166-a384-439fc9963622",
+      "name": "Fetch Semantic Hit",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        1250
+      ],
+      "parameters": {
+        "operation": "get",
+        "key": "={{ 'faq:' + $json.candidateHash }}",
+        "propertyName": "cachedValue",
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "id": "bDN9Hfgixc2fSuSq",
+          "name": "Redis account (authenticated)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1b4dd751-5a49-4ff7-bd00-c0a3bde82537",
+      "name": "IF (Candidate Found?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        820,
+        1250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-candidate",
+              "leftValue": "={{ $json.candidateFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "typo-dualwrite-if-audio",
+      "name": "IF (Dual Write Needed - Audio)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1968,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-dualwrite-audio",
+              "leftValue": "={{ $('Correct Domain Terms').isExecuted ? $('Correct Domain Terms').first().json.correctedHash : $('Normalize & Hash Question').first().json.questionHash }}",
+              "rightValue": "={{ $('Normalize & Hash Question').first().json.questionHash }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "typo-dualwrite-if-noaudio",
+      "name": "IF (Dual Write Needed - NoAudio)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1296,
+        1040
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-dualwrite-noaudio",
+              "leftValue": "={{ $('Correct Domain Terms').isExecuted ? $('Correct Domain Terms').first().json.correctedHash : $('Normalize & Hash Question').first().json.questionHash }}",
+              "rightValue": "={{ $('Normalize & Hash Question').first().json.questionHash }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "806ac92c-f966-435e-8fed-d2c8669a60fc",
+      "name": "IF (Judge SAME?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1420,
+        1250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-judge",
+              "leftValue": "={{ $json.isSame }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-needs-clarification",
+              "leftValue": "={{ $json.needsClarification }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1a2b3c4-0003-4a4a-9c9c-typolex00003",
+      "name": "IF (Needs Clarification?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        592,
+        512
+      ]
+    },
+    {
+      "id": "6815539e-f1da-4bf9-a34d-a86405cf7352",
+      "name": "IF (Semantic Value Present?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        1250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-sem-present",
+              "leftValue": "={{ $json.cachedValue }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0e2aa09d-069d-48a4-a763-93c18d265576",
+      "name": "Index Question Vector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        1450
+      ],
+      "parameters": {
+        "jsCode": "// Deterministic point id from the question hash, so re-asking the same\n// question overwrites its vector instead of duplicating it.\nconst items = $input.all();\ntry {\n  if (!$('Embed Question').isExecuted) return items;\n  const vec = $('Embed Question').first().json.embedding?.values;\n  if (!vec || !vec.length) return items;\n  const nh = $('Normalize & Hash Question').first().json;\n  const id = parseInt(nh.questionHash, 16);\n  if (!Number.isFinite(id)) return items;\n  let correctedQuestion = nh.userText;\n  try {\n    if ($('Correct Domain Terms').isExecuted) {\n      correctedQuestion = $('Correct Domain Terms').first().json.userText;\n    }\n  } catch (eCdt) {\n    // keep raw fallback\n  }\n  await this.helpers.httpRequest({\n    method: 'PUT',\n    url: 'http://qdrant:6333/collections/faq_cache/points',\n    body: { points: [{ id, vector: vec, payload: {\n      questionHash: nh.questionHash, question: correctedQuestion } }] },\n    json: true,\n  });\n} catch (e) {\n  // Indexing is best-effort; never break the response over it.\n}\nreturn items;"
+      }
+    },
+    {
+      "id": "58034b33-d3a5-40d5-9a54-76107c316ec4",
+      "name": "Judge Same Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        1250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: `A university receptionist caches answers. Decide whether the stored answer to Question A can be reused for Question B.\\n\\nQuestion A: ${$json.candidateQuestion}\\nQuestion B: ${$('Correct Domain Terms').first().json.userText}\\n\\nAnswer SAME if both questions request the same information. Differences in wording, formality, word order, spelling, or language (English vs Arabic) do NOT make them different.\\n\\nAnswer DIFFERENT only if they ask about genuinely different things - a different semester, a different degree level, a different campus, a different department, or a different kind of detail (for example phone vs email, or president vs founder).\\n\\nReply with exactly one word: SAME or DIFFERENT.` } ] } ], generationConfig: { temperature: 0, maxOutputTokens: 16, thinkingConfig: { thinkingBudget: 0 } } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "3NeEadTXR21DloX6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT value FROM admin_settings WHERE key = 'typo_lexicon'",
+        "options": {}
+      },
+      "id": "f1a2b3c4-0001-4a4a-9c9c-typolex00001",
+      "name": "Load Typo Lexicon",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        208,
+        512
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pBEr4vwito39rUaR",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "typo-dualwrite-save-audio",
+      "name": "Save Audio to Cache (Corrected)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        320
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'faq:' + $('Correct Domain Terms').first().json.correctedHash }}",
+        "value": "={{ JSON.stringify({ answer: $json.answer, audioBase64: $json.audioBase64, audioMime: $json.audioMime, question: $json.question, rawQuestion: $('Correct Domain Terms').first().json.userTextRaw || '', corrections: $('Correct Domain Terms').first().json.corrections || [] }) }}",
+        "expire": true,
+        "ttl": 2592000,
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "id": "bDN9Hfgixc2fSuSq",
+          "name": "Redis account (authenticated)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "typo-dualwrite-save-noaudio",
+      "name": "Save to Redis Cache (Corrected)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        1040
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'faq:' + $('Correct Domain Terms').first().json.correctedHash }}",
+        "value": "={{ JSON.stringify({ answer: $json.answer, audioBase64: $json.audioBase64 || '', audioMime: $json.audioMime || '', question: $json.question, rawQuestion: $('Correct Domain Terms').first().json.userTextRaw || '', corrections: $('Correct Domain Terms').first().json.corrections || [] }) }}",
+        "expire": true,
+        "ttl": 2592000,
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "id": "bDN9Hfgixc2fSuSq",
+          "name": "Redis account (authenticated)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "cd38506e-c752-4cf1-b8bb-155fff143bf7",
+      "name": "Semantic Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        1250
+      ],
+      "parameters": {
+        "jsCode": "// Qdrant needs no auth, so call it straight from the Code node.\n// Any failure here must degrade to a normal cache miss, never break the turn.\nconst vec = $json.embedding && $json.embedding.values;\nif (!vec || !vec.length) return [{ json: { candidateFound: false } }];\ntry {\n  const res = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'http://qdrant:6333/collections/faq_cache/points/search',\n    body: { vector: vec, limit: 3, with_payload: true, score_threshold: 0.8 },\n    json: true,\n  });\n  const top = res && res.result && res.result[0];\n  if (!top || !top.payload || !top.payload.questionHash) {\n    return [{ json: { candidateFound: false } }];\n  }\n  return [{ json: {\n    candidateFound: true,\n    candidateHash: top.payload.questionHash,\n    candidateQuestion: top.payload.question,\n    candidateScore: top.score,\n  } }];\n} catch (e) {\n  return [{ json: { candidateFound: false, lookupError: String(e).slice(0, 200) } }];\n}"
+      }
     }
   ],
-  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
         [
           {
-            "node": "Switch (Audio or Text)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Switch (Audio or Text)": {
-      "main": [
-        [
-          {
-            "node": "Normalize Binary",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Set userText (Text)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Normalize Binary": {
-      "main": [
-        [
-          {
-            "node": "Gemini STT",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set userText (Audio)": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
             "type": "main",
             "index": 0
           }
@@ -592,7 +1308,63 @@
       "main": [
         [
           {
-            "node": "AI Agent",
+            "node": "Normalize & Hash Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Hash Question": {
+      "main": [
+        [
+          {
+            "node": "Check Redis Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Redis Cache": {
+      "main": [
+        [
+          {
+            "node": "IF (Cache Hit?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Cache Hit?)": {
+      "main": [
+        [
+          {
+            "node": "Parse Cached Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Typo Lexicon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cached Response": {
+      "main": [
+        [
+          {
+            "node": "Anonymize Log Entry",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (needs TTS?)",
             "type": "main",
             "index": 0
           }
@@ -676,7 +1448,28 @@
       "main": [
         [
           {
-            "node": "IF (wantsAudio?)",
+            "node": "Anonymize Log Entry",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (needs TTS?)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Index Question Vector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anonymize Log Entry": {
+      "main": [
+        [
+          {
+            "node": "Log Session (Postgres)",
             "type": "main",
             "index": 0
           }
@@ -687,7 +1480,7 @@
       "main": [
         [
           {
-            "node": "Gemini TTS",
+            "node": "Respond (Text + Audio)",
             "type": "main",
             "index": 0
           }
@@ -695,6 +1488,16 @@
         [
           {
             "node": "Respond (Text Only)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save to Redis Cache",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (Dual Write Needed - NoAudio)",
             "type": "main",
             "index": 0
           }
@@ -708,6 +1511,16 @@
             "node": "Respond (Text + Audio)",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Save Audio to Cache",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (Dual Write Needed - Audio)",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -718,24 +1531,6 @@
           {
             "node": "Qdrant Vector Store",
             "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini STT": {
-      "main": [
-        [
-          {
-            "node": "Set userText (Audio)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond (Error)",
-            "type": "main",
             "index": 0
           }
         ]
@@ -758,18 +1553,232 @@
           }
         ]
       ]
+    },
+    "IF (needs TTS?)": {
+      "main": [
+        [
+          {
+            "node": "Split Answer Into Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF (wantsAudio?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Answer Into Chunks": {
+      "main": [
+        [
+          {
+            "node": "Gemini TTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Question": {
+      "main": [
+        [
+          {
+            "node": "Semantic Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Semantic Lookup": {
+      "main": [
+        [
+          {
+            "node": "IF (Candidate Found?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Candidate Found?)": {
+      "main": [
+        [
+          {
+            "node": "Judge Same Question",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Judge Same Question": {
+      "main": [
+        [
+          {
+            "node": "Check Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Verdict": {
+      "main": [
+        [
+          {
+            "node": "IF (Judge SAME?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Judge SAME?)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Semantic Hit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Semantic Hit": {
+      "main": [
+        [
+          {
+            "node": "IF (Semantic Value Present?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Semantic Value Present?)": {
+      "main": [
+        [
+          {
+            "node": "Parse Cached Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Typo Lexicon": {
+      "main": [
+        [
+          {
+            "node": "Correct Domain Terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correct Domain Terms": {
+      "main": [
+        [
+          {
+            "node": "IF (Needs Clarification?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Needs Clarification?)": {
+      "main": [
+        [
+          {
+            "node": "Build Clarification Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Embed Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Clarification Reply": {
+      "main": [
+        [
+          {
+            "node": "IF (needs TTS?)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Anonymize Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Dual Write Needed - NoAudio)": {
+      "main": [
+        [
+          {
+            "node": "Save to Redis Cache (Corrected)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (Dual Write Needed - Audio)": {
+      "main": [
+        [
+          {
+            "node": "Save Audio to Cache (Corrected)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "8e1e7dcf-cf8e-4335-9805-a103efe79f92",
+  "pinData": {},
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "e45265a3a5a0e6b9ecd4cd587767717341e4aa817eccf8b5edf21577ef6b9a1b"
+    "templateCredsSetupCompleted": true
   },
   "id": "d8nftRI2zhutW98L",
-  "tags": []
+  "versionId": "6243db98-6a58-4884-9df4-9087390f2adb"
 }
