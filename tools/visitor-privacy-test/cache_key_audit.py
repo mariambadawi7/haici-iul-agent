@@ -45,14 +45,20 @@ for k in keys:
     raw = redis("GET", k)
     if not raw:
         continue
-    low = raw.lower()
+    try:
+        entry = json.loads(raw)
+    except Exception:
+        entry = {}
+    q = entry.get("question") or ""
+    # Scan the TEXT fields only, never the whole record. Cached entries carry a
+    # base64 WAV of ~450KB, and a blob that size contains a 4-letter string like
+    # "omar" by pure chance — measured: 2 hits in one entry whose answer holds no
+    # name at all. Scanning `raw` therefore flags clean entries as name-bearing,
+    # and could just as easily manufacture a false LEAK and fail the suite.
+    low = " ".join([q, entry.get("answer") or "", entry.get("rawQuestion") or ""]).lower()
     who = [v for v in VISITORS if any(f in low for f in NAME_FORMS[v])]
     if not who:
         continue
-    try:
-        q = json.loads(raw).get("question") or ""
-    except Exception:
-        q = ""
     n = normalise(q)
     if k == "faq:" + djb2(n):
         leaks.append((k, q))

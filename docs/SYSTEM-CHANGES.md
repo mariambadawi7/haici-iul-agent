@@ -770,8 +770,11 @@ true — what changed was the price of failing. Measured on the same error:
 
 7 of 18 embed calls were costing over 5 s, and the waits applied to calls that
 eventually *succeeded* too. This is exactly the trade flagged when the retry went
-in — "good for transient bursts, bad under sustained exhaustion" — and the quota
-turned out to be sustained, not bursty. **Reduced to `maxTries 2 /
+in — "good for transient bursts, bad under sustained exhaustion" — and at the
+time the quota looked sustained rather than bursty. **That reading did not
+survive more data** (see *Embedding quota: not actually a standing problem*
+below); what is certain is that a 12 s stall on ~28% of turns was not worth
+paying for a retry that cannot beat a per-minute quota anyway. **Reduced to `maxTries 2 /
 waitBetweenTries 1000`**: still absorbs a one-off network blip, but a quota error
 now costs ~1 s. Retrying harder cannot beat a per-minute quota, so there is no
 version of this that both retries hard and stays fast. Measured after:
@@ -803,6 +806,36 @@ greeting was spoken with audio on. That is the §6 fan-in rule biting again.
 
 **3. The camera split the cache per visitor** — resolved below. Nothing was
 deleted: `evicted_keys: 0`, `expired_keys: 0`, entries growing.
+
+### Embedding quota: not actually a standing problem
+
+The 28% embedding failure rate that triggered the retry work was measured in a
+single two-hour window (13:00–15:00 on 2026-09-01) while the API was being
+hammered by rapid back-to-back testing. `semantic_skipped` now makes the rate
+measurable rather than a guess, and it has not recurred:
+
+| hour | turns reaching the semantic tier | skipped | rate |
+|---|---|---|---|
+| 13:00 | 6 | 3 | 50% |
+| 14:00 | 5 | 2 | 40% |
+| 16:00 | 5 | 0 | 0% |
+| 17:00 | 25 | 0 | 0% |
+| 18:00 | 20 | 0 | 0% |
+| 19:00 | 8 | 0 | 0% |
+
+**0 failures in the 58 calls since.** Note the later hours were not gentler —
+17:00 alone made five times as many embedding calls as the worst hour did — so
+raw request rate does not fully explain it either; a transient condition on
+Google's side is as plausible as self-inflicted load. The cause is not
+established, only that it stopped.
+
+The practical conclusion for the report: **do not buy a paid tier or stand up a
+local embedding model on the strength of that 28% figure.** It was measured
+under synthetic load that looks nothing like kiosk traffic (§1 sizing assumes
+~180 questions/day, and only cache misses embed at all). The honest position is
+that the failure is now cheap (~1 s) and, more importantly, *visible* — if it
+returns under real traffic, `semantic_skipped` will show it in the dashboard
+before anyone has to guess.
 
 ### Per-visitor cache keys narrowed to identity questions
 
@@ -1174,6 +1207,159 @@ Had the logger kept reading `Semantic Lookup`, that degraded turn would have
 been recorded as a genuine miss — the precedence is the whole point, not a
 detail. Both genuine `DIFFERENT` verdicts tested alongside it logged `false`,
 so the flag does not simply mark every cache miss.
+
+### Full-stack audit, 2026-09-01 — method, results, and one defect
+
+An end-to-end verification pass over the whole stack: publication state, graph
+integrity, every response path, the caches, the database, the camera, the voice
+path and the admin API. Recorded here because the *method* is reusable and the
+numbers are the ones the report should quote.
+
+**Publication state.** All four workflows are active and, critically,
+`versionId == activeVersionId` on each — the editor draft and the published
+version are identical, so nothing half-finished is one click from shipping.
+This is the check that caught a false alarm on 2026-08-30 and it is now the
+first thing to run:
+
+| Workflow | id | Nodes | Published == draft |
+|---|---|---|---|
+| Agent Workflow | `d8nftRI2zhutW98L` | 45 | yes |
+| Admin Dashboard API | `9UwU0payk3rht1ms` | 25 | yes |
+| STT Webhook | `KNUv1TRbHWl3v6oS` | 5 | yes |
+| RAG workflow | `btAR6oU4MThHIYy9` | 7 | yes |
+
+**Graph integrity.** Scanned the *published* graph of all four for the failure
+modes this project has actually been bitten by: unbalanced `={{ … }}`
+expressions (0), `$('Node')` references to nodes that no longer exist (0),
+connection endpoints that resolve to nothing (0), and the Postgres `id: 0`
+column-mapping bug that once silently killed logging (absent). Ten nodes carry
+`onError: continueRegularOutput` — by design, but they are exactly the nodes
+that can fail invisibly, so side effects are asserted directly rather than
+trusted from node status.
+
+**Measured latency**, from `receptionist_session_logs` (n=432) and per-node
+execution timings. The two-tier cache is doing what it was built to do:
+
+| Path | Median | p95 | With TTS (avg) |
+|---|---|---|---|
+| `cache_hit` | 80 ms | 204 ms | 490 ms |
+| `greeting` | 199 ms | 316 ms | — |
+| `semantic_hit` | ~2.2 s | 3.0 s | 5.1 s |
+| `fresh` | ~6.5 s | 23.6 s | 16.3 s |
+
+Where fresh-path time goes: `Embed Question` ~1.1 s and `Judge Same Question`
+~0.75 s are paid *before* the agent runs, then the agent itself ~3.4 s (its
+Gemini call ~1.8 s plus `Search_Local_Documents` ~2.2 s). TTS adds ~8.4 s and
+is the single largest contributor — it roughly doubles every path it touches,
+and the worst turn on record (67 s) was a 1,152-character answer with audio.
+The ~1.8 s semantic-tier overhead on every miss is bought back by the 30
+semantic hits that skipped a full agent call, so the tier is net positive, but
+it is the reason a miss is never fast.
+
+**Defect found — a blank answer on the semantic-hit + audio path, which then
+poisoned the cache.** `Build JSON (Text + Audio)` picks its answer from
+whichever upstream branch ran, using a `||` chain of `pickSource()` calls that
+returned `$(name).first().json` whenever the node had executed:
+
+```js
+const source = pickSource('Keep Answer Text')
+  || pickSource('Build Clarification Reply')
+  || pickSource('Detect Greeting')
+  || pickSource('Parse Cached Response') || {};
+```
+
+`Detect Greeting` runs on **every** non-cache-hit turn and passes non-greeting
+items straight through untouched — it has no `answer` field, but it *is* a
+non-null object, so it won the chain ahead of `Parse Cached Response`, which
+held the real answer. Executing is not the same as carrying an answer, and the
+chain only tested the former.
+
+Confirmed from execution data rather than inferred — in execution 1284,
+`Parse Cached Response` output `answer: "The IUL campus in Khaldeh is located
+on the Old Saida Road…"` while `Build JSON` emitted `answer: ""` with 492 KB of
+valid audio attached.
+
+The blast radius is narrow but the failure compounds. Only one path is hit —
+semantic hit, `wantsAudio: true`, no cached audio yet — because `fresh` is
+rescued by `Keep Answer Text` ranking first, `clarify` by `Build Clarification
+Reply`, `greeting` because `Detect Greeting` does set an answer for real
+greetings, and `cache_hit` because `Detect Greeting` never runs on it. But the
+empty answer is then **written into Redis with a 30-day TTL**, so every later
+hit on that question serves a blank bubble with working audio, and the
+structural privacy audit downgrades the entry to `UNVERIFIED` because it has no
+answer text left to classify. A user-visible symptom ("the agent went quiet in
+text but still talks") with no error anywhere — the same silent-failure shape
+as the two already recorded in §6.
+
+The fix makes the guard test for a usable answer rather than a live node:
+
+```js
+return (j && typeof j.answer === 'string' && j.answer.trim()) ? j : null;
+```
+
+**Voice path uses Groq, not the local Whisper container.** `STT Webhook` posts
+to `api.groq.com` (`whisper-large-v3-turbo`); the `whisper` service in
+`docker-compose.yml` has served no transcription traffic and exists now only as
+a fallback that nothing dials. Worth stating plainly in the report: recorded
+audio leaves the machine, so the stack is not fully local. Round-trip measured
+at 1.4 s (webm/Opus) and 1.9 s (WAV), transcription accurate in both.
+
+`Groq STT` also has **no retry and no error branch**, unlike the Agent
+Workflow's HTTP nodes which all carry `retryOnFail` with `maxTries: 2`. The one
+recent error in the entire instance (execution 1013) was exactly this: a
+transient `connection was aborted`, which dropped the user's whole voice turn.
+
+**Everything else verified working.** Redis 62 entries, all with ~30-day TTLs,
+1.36 MB against a 3 GB ceiling; Qdrant `faq_cache` 76 points and `local_docs`
+186; Postgres 422 rows across both tables with all five indexes present; the
+camera backend healthy with two live sessions, two enrolled identities and
+215–315 ms end-to-end inference; the admin API correct on all four views with
+the role split enforced (client passcode gets 403 on lexicon, bad and empty
+passcodes get 401). The visitor-privacy regression suite passes 21/21 plus a
+clean structural audit — 0 leaked. Only 8 error executions exist instance-wide
+and none in the Agent Workflow since 2026-08-23.
+
+**Open defect — the semantic cache is language-blind on the answer side.** §7's
+"cross-language reuse re-tested" records that an Arabic query can serve an
+answer cached for the English equivalent, and treats that as a win. It is a win
+for *retrieval*; nothing, however, checks the language of the answer that comes
+back. Reproduced live: `tell me about haci` (English) → corrected to
+`what is HAICI?` → `semantic_hit` → **answered in Arabic**.
+
+The failure compounds the same way the blank answer did. A cross-language hit is
+served verbatim, and then the corrected-question dual-write caches that answer
+under the *asker's* language key — so one Arabic turn permanently installs an
+Arabic answer under an English question hash, for 30 days. Four such entries
+existed at audit time, all `what is HAICI?` holding Arabic text. Other phrasings
+of the same question ("What is HAICI and what does it do?") still answer in
+English, so the symptom is intermittent and phrasing-dependent, which is the
+hardest kind to report as a bug.
+
+Not fixed here, because the remedy is a design decision rather than a repair:
+either fold the detected language into the cache key, require a language match
+before the judge can return `SAME`, or suppress the write-back on a
+cross-language hit. The first preserves the documented cross-language behaviour
+while stopping it from cementing; it also costs cache-sharing between the two
+languages, which is the trade-off to state explicitly in the report.
+
+**Fixed — the privacy audit could manufacture a false leak.**
+`cache_key_audit.py` classified an entry as name-bearing by scanning the whole
+Redis record. Entries carry a ~450 KB base64 WAV, and a blob that size contains
+a four-letter string like `omar` by chance — measured at 2 hits in one entry
+whose text holds no name at all. That produced a spurious `UNVERIFIED`, and
+could equally have produced a spurious `LEAK` and a non-zero exit. The scan now
+reads `question`, `answer` and `rawQuestion` only. Post-fix: 9 private,
+0 unverified, 0 leaked.
+
+**Two housekeeping notes.** n8n's `database.sqlite` has reached 246 MB because
+execution history stores the base64 audio payload — roughly 500 KB per audio
+turn, several times over across the TTS, build and respond nodes. On a kiosk
+running continuously this is the fastest-growing thing in the stack and wants
+an `EXECUTIONS_DATA_MAX_AGE` / prune policy, which is currently unset. Separately,
+a stray `haici-agent-web-run-*` container from a one-off `docker compose run`
+has been holding port 5199 and ~267 MB for over a day.
+
+---
 
 ---
 

@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A self-hosted local AI agent stack defined by `docker-compose.yml`, plus a React/TypeScript web UI in `web/`. The compose file orchestrates n8n (workflows), Qdrant (vectors), Ollama (LLM), Whisper (STT), Piper (TTS), and the `web` service (Vite + Bun). The `n8n_local_data/` directory holds n8n's SQLite DB and stored workflows/credentials; treat it as runtime state, not source. `shared_docs/` is curated input for workflows.
+A self-hosted agent stack defined by `docker-compose.yml`, plus a React/TypeScript web UI in `web/`. The compose file orchestrates n8n (workflows), Qdrant (vectors), Postgres (logs/settings), Redis (answer cache), Whisper (an unused local STT fallback) and the `web` service (Vite + Bun).
+
+**Inference is not local.** Ollama and Piper were removed. The agent LLM, the semantic-cache judge, the embeddings and TTS are all Google Gemini (`generativelanguage.googleapis.com`), and speech-to-text is Groq (`api.groq.com`, `whisper-large-v3-turbo`) — see § External services. The `whisper` container still runs but serves no traffic.
+
+The `n8n_local_data/` directory holds n8n's SQLite DB and stored workflows/credentials; treat it as runtime state, not source. `shared_docs/` is curated input for workflows.
 
 ## JS/TS tooling: Bun, in Docker only
 
@@ -19,26 +23,36 @@ docker compose logs -f n8n        # tail a specific service
 docker compose restart n8n        # restart one service after env changes
 docker compose pull && docker compose up -d   # upgrade images
 
-# pull a model into the ollama container (must be done after first start)
-docker exec -it ollama ollama pull <model-name>
 ```
 
 Service endpoints (host ports):
 - Web UI: http://localhost:5173
 - n8n UI: http://localhost:5678
 - Qdrant: http://localhost:6333
-- Ollama: http://localhost:11435  (note: remapped from container's 11434)
-- Whisper (OpenAI-compatible STT): http://localhost:8000
-- Piper (TTS): http://localhost:5500
+- Postgres: localhost:5432  (loopback only)
+- Redis: localhost:6379  (loopback only)
+- Whisper (OpenAI-compatible STT, currently unused): http://localhost:8000
 
 ## Architecture
 
 n8n is the orchestrator; the other four services are sidecars it calls by **container name** over Docker's default network (not via the host ports above). When wiring nodes inside n8n use these internal URLs:
 
-- `http://ollama:11434` — LLM inference (also exposed to n8n as `OLLAMA_HOST` env var)
 - `http://qdrant:6333` — vector store
-- `http://whisper:8000` — speech-to-text, OpenAI-compatible `/v1/audio/transcriptions`
-- `http://piper:5000` — text-to-speech, POST raw text → WAV
+- `http://whisper:8000` — local STT, OpenAI-compatible. **Nothing calls this**; the voice path uses Groq instead.
+- `postgres:5432` — `receptionist_session_logs` + `admin_settings`
+- `redis:6379` — the Tier-1 answer cache (password from `.env`)
+
+### External services
+
+These are the real dependencies, and they mean audio and question text leave the
+machine:
+
+| Endpoint | Used by |
+|---|---|
+| `api.groq.com/openai/v1/audio/transcriptions` | `STT Webhook` / `Groq STT` |
+| `generativelanguage.googleapis.com` …`gemini-2.5-flash-preview-tts` | `Agent Workflow` / `Gemini TTS` |
+| `generativelanguage.googleapis.com` …`gemini-2.5-flash` | `Agent Workflow` / `Judge Same Question` |
+| `generativelanguage.googleapis.com` …`gemini-embedding-001` | `Agent Workflow` / `Embed Question` |
 
 n8n's `depends_on` ensures sidecars start first, but Docker does **not** wait for them to be healthy — workflows that fire on container startup may need a retry.
 
@@ -48,11 +62,11 @@ n8n's `depends_on` ensures sidecars start first, but Docker does **not** wait fo
 
 ### GPU
 
-Ollama is configured to reserve one NVIDIA GPU (`deploy.resources.reservations.devices`). On a host without nvidia-container-toolkit this block makes `docker compose up` fail — comment it out for CPU-only machines.
+No service reserves a GPU any more — inference is remote (Gemini/Groq), so the stack runs on a CPU-only host unchanged.
 
 ### Persistence layout
 
-Each service has a host-bind volume at `./<service>_data/`. `piper_data/` and `whisper_data/` are owned by root (created by their containers); needs `sudo` to clean up. Deleting `n8n_local_data/` wipes all workflows and credentials.
+Each service has a host-bind volume at `./<service>_data/`. `whisper_data/` is owned by root (created by its container); needs `sudo` to clean up. Deleting `n8n_local_data/` wipes all workflows and credentials.
 
 ## Web UI (`web/`)
 
@@ -62,12 +76,12 @@ A Vite + React 18 + TypeScript + Tailwind app. Key shape:
 - **Retry survives reloads.** Text messages cache `originalText` on the message itself; voice recordings get stored in IndexedDB keyed by message id (`lib/audioStore.ts`). On boot, `useChat` hydrates the `retriable` Set from both sources, so the Retry button on a failed message works even after a page refresh.
 - **`ErrorBoundary` and `HealthBanner`.** `main.tsx` wraps `<App>` in `ErrorBoundary` so a render crash shows a recovery screen instead of a blank page. `App.tsx` runs `checkHealth()` on mount and shows an amber banner at the top whenever the n8n webhook is unreachable or the workflow is inactive.
 - **State machine for the avatar** lives in `web/src/App.tsx` and resolves a single `FaceState` (`idle | listening | thinking | speaking`) from the union of TTS/STT/pending booleans. Whichever renderer is active (see § The avatar) reads that one prop plus an `amplitude` 0..1 driven by a WebAudio AnalyserNode tap on the playback element — that's where the lip-sync comes from. When TTS is off, `App.tsx` synthesises the envelope from the reply's length instead, so the mouth still moves on text-only turns.
-- **The frontend ONLY talks to the n8n webhook.** It does not call Whisper or Piper directly — the workflow handles STT and TTS internally and returns audio as `audioBase64`. The only env var that matters is `VITE_N8N_WEBHOOK_URL` (default `/webhook/rag-agent` — relative).
+- **The frontend ONLY talks to the n8n webhook.** It does not call any STT/TTS service directly — the workflows handle both and return audio as `audioBase64`. The only env var that matters is `VITE_N8N_WEBHOOK_URL` (default `/webhook/rag-agent` — relative).
 - **CORS is sidestepped via a Vite reverse-proxy.** `web/vite.config.ts` proxies `/webhook/*` to `http://n8n:5678/webhook/*` over the Docker network. The browser only ever talks to `localhost:5173`, so the request is same-origin and CORS never gets a vote. If a turn fails with "Could not reach the workflow through the Vite proxy", the web container can't resolve `n8n:5678` — usually fixed by `docker compose up -d --force-recreate web`.
 - **Two request shapes** to the same webhook:
   - **Text turn:** `POST application/json` with body `{ sessionId, text, wantsAudio }`. The workflow's `Set userText (Text)` node reads `body.text`.
-  - **Voice turn:** `POST multipart/form-data` with `file` (the recorded blob), `sessionId`, and `wantsAudio` as form fields. n8n exposes the first binary file as `$binary.data0`, which the workflow's Switch routes through Whisper.
-- **Response shape** (JSON): `{ answer, question?, audioBase64?, audioMime? }`. `question` is the Whisper transcript on voice turns and replaces the placeholder bubble in the UI. When `wantsAudio:true`, the workflow's Piper node fills `audioBase64`.
+  - **Voice turn:** `POST multipart/form-data` with `file` (the recorded blob), `sessionId`, and `wantsAudio` as form fields. Audio goes to the separate `STT Webhook` workflow (`POST /webhook/stt`), which transcribes via Groq and returns `{ text, language, error }`. The Agent Workflow's own audio branch was removed — there is one way in for audio.
+- **Response shape** (JSON): `{ answer, question?, audioBase64?, audioMime? }`. `question` is the transcript on voice turns and replaces the placeholder bubble in the UI. When `wantsAudio:true`, the workflow's `Gemini TTS` node fills `audioBase64`.
 - **The workflow must be Active.** `/webhook-test/rag-agent` only listens for one call per Listen click; subsequent calls succeed in n8n's execution history but the HTTP response never reaches the browser (it surfaces as `NetworkError when attempting to fetch resource`). Toggle the workflow Active in n8n and use `/webhook/rag-agent`.
 - **Sessions** are stored in `localStorage` only (see `web/src/lib/storage.ts`). No server-side persistence — clearing site data wipes them. The voice retry cache is in-memory only; reloading the page disables Retry on already-failed voice messages.
 - **Branding is runtime config, not code.** Nothing in `web/src` names a client. See § White-labelling below.
