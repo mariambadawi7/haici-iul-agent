@@ -19,6 +19,15 @@ export function useSTT() {
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
+  /**
+   * The mic's node in the VU-meter graph. Held only so it can be disconnected
+   * when recording ends. Leaving a live MediaStreamSource attached to a
+   * long-lived AudioContext keeps iOS's audio session in its record-capable
+   * category, which routes and levels playback differently — so TTS that
+   * follows a voice turn can come back inaudible. Stopping the track is not
+   * enough; the node has to leave the graph.
+   */
+  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const startedAtRef = useRef<number>(0);
   /**
@@ -56,6 +65,12 @@ export function useSTT() {
   }, []);
 
   const releaseStream = useCallback(() => {
+    try {
+      micSourceRef.current?.disconnect();
+    } catch {
+      /* already torn down */
+    }
+    micSourceRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   }, []);
@@ -96,7 +111,13 @@ export function useSTT() {
       // VU meter
       const ctx = ctxRef.current ?? new AudioContext();
       ctxRef.current = ctx;
+      try {
+        micSourceRef.current?.disconnect();
+      } catch {
+        /* ignored */
+      }
       const source = ctx.createMediaStreamSource(stream);
+      micSourceRef.current = source;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
