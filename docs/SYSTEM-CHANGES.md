@@ -897,11 +897,34 @@ is green, and the log records a perfectly ordinary `fresh`.
 **3 of 15** embedding calls (20%) failed this way during rapid testing. That is
 §8's "degrade, never break" behaving exactly as designed, and it is the right
 trade — but it means the Tier-2 hit rate falls off precisely when traffic is
-heaviest, and nothing surfaces it. Two things follow for the report: benchmark
-numbers taken from a burst will understate semantic-hit rate, and the node is
-worth a `retryOnFail` with backoff, or a distinct `match_type` for "semantic
-skipped" so the condition is visible in the logs rather than hiding inside
-`fresh`.
+heaviest, and nothing surfaces it. One consequence for the report: benchmark
+numbers taken from a burst **understate** the semantic-hit rate.
+
+**Mitigated:** `Embed Question` now carries `retryOnFail: true`, `maxTries: 3`,
+`waitBetweenTries: 5000`. `onError` deliberately stays
+`continueRegularOutput`, so if all three tries fail the turn still degrades to a
+normal cache miss rather than erroring — the retry is an extra chance, not a new
+hard dependency.
+
+Two honest limits on this fix:
+
+- **n8n's retry is a fixed delay, not exponential backoff.**
+  `waitBetweenTries` is a constant (5000 ms is n8n's maximum). Three tries span
+  roughly ten seconds, which is enough to cross into a fresh per-minute quota
+  window for the bursty collisions actually observed, but it is not true backoff
+  and will not out-wait a genuinely exhausted quota.
+- **It costs latency exactly on the turns already degrading.** A turn whose
+  embedding is going to fail now waits ~10 s before falling through to the agent
+  instead of failing immediately. That is a good trade for transient bursts and
+  a bad one under sustained quota exhaustion — if that is ever observed in real
+  traffic, drop `maxTries` to 2 or accept the degradation.
+
+Still open: the condition remains invisible in the logs. A failed embedding is
+recorded as an ordinary `fresh`, so a distinct `match_type` (or a
+`semanticSkipped` flag on the log row) is still worth adding before hit-rate
+figures are quoted with confidence. `Judge Same Question` calls the same Gemini
+API with the same `continueRegularOutput` fallback and has no retry — it is the
+next candidate if quota errors show up there too.
 
 ---
 

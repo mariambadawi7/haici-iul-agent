@@ -936,7 +936,10 @@
           "name": "Google Gemini(PaLM) Api account"
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "id": "b094ef35-3a13-4166-a384-439fc9963622",
@@ -1780,5 +1783,5 @@
     "templateCredsSetupCompleted": true
   },
   "id": "d8nftRI2zhutW98L",
-  "versionId": "0fa5f398-dc38-427c-8a30-33ac2fe00fce"
+  "versionId": "f99881aa-bae6-45a3-8723-3709a88e2c6e"
 }
