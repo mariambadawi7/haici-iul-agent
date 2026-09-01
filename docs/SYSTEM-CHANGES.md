@@ -902,6 +902,21 @@ failures that were not failures. The assertion looked for the Latin string
 the system. A checker that only understands one script will quietly mis-grade a
 bilingual deployment.
 
+**Kept as a regression suite** in `tools/visitor-privacy-test/`, because the
+guarantee is one edit away from reverting to a promise:
+
+- `leak_suite.py` — 21 behavioural cases (sharing, identity recognition in both
+  languages, strangers, cross-visitor confusion). Proves the questions it asks
+  do not leak.
+- `cache_key_audit.py` — recomputes the cache keys independently, with the same
+  djb2 and normalisation as the workflow, and classifies **every** name-bearing
+  entry as private or shared. Proves that *no* shared key holds a name, which
+  the behavioural suite structurally cannot. Anything it cannot positively
+  classify is reported `UNVERIFIED` rather than assumed safe.
+
+Both exit non-zero on failure. Current state: 21/21 behavioural, and 9 named
+entries all under private keys with 0 unverified and 0 leaked.
+
 ### Arabic punctuation was inside the tokeniser's "word" class
 
 Wiring the flag above immediately exposed a latent bug, because it was the first
