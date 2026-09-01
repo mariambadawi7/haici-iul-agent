@@ -780,8 +780,71 @@ dashboard's Fresh/Cache filters do not match it, "All" does).
 sources by name and would otherwise have returned an empty answer whenever a
 greeting was spoken with audio on. That is the §6 fan-in rule biting again.
 
-**3. The camera splits the cache in two** — see *Still open*. Nothing was
+**3. The camera split the cache per visitor** — resolved below. Nothing was
 deleted: `evicted_keys: 0`, `expired_keys: 0`, entries growing.
+
+### Per-visitor cache keys narrowed to identity questions
+
+Every question from a recognised visitor used to get its own private key, so the
+camera recognising someone handed them a completely cold cache — the reported
+"all the cached questions got deleted". The key is now private **only when the
+answer is inherently about that person** ("who am I", "what is my name");
+everything else shares one entry, as it did before the camera existed.
+
+That was not a one-line change, because the narrow rule had already failed once
+and the comment in `Normalize & Hash Question` said so: the agent opened ordinary
+answers with "Hello Mariam, ..." and those must never reach the next visitor.
+Measured before changing anything — **18 of 321** logged answers contained a
+visitor name, including *"How do I apply to IUL?"* → *"Hello Mariam. To
+apply..."*. So three things had to move together:
+
+1. **The agent no longer greets.** Its prompt permits the name only for identity
+   questions. That became safe only because greetings are now answered before the
+   agent runs (`Detect Greeting`), so the personal touch survives while the name
+   leaves ordinary answers.
+2. **`correctedHash` follows the same rule.** The typo dual-write stores the
+   answer under a second key which ignored the visitor entirely — a personal
+   answer would have leaked through that back door on the next ask.
+3. **The semantic tier had to stop bypassing the key** — below.
+
+### The semantic tier walked straight past the per-visitor key
+
+Caught by the acceptance test, not by reasoning. A stranger asked *"Who am I?"*
+and was told *"You are Mariam Badawi."*
+
+Tier 1 behaved correctly — the stranger's shared key missed. The semantic tier
+then embedded the question, matched the recognised visitor's vector at
+**0.99999964**, the judge said `SAME`, and `Fetch Semantic Hit` did a Redis `GET`
+on **the candidate's** hash: the private one. That tier fetches by the stored
+hash, which carries no notion of who is asking, so per-visitor keying cannot
+defend itself one layer up.
+
+**Pre-existing, not introduced by the narrowing** — the same path would have
+served the same answer under the old rule. It had simply never been tested.
+
+Closed at both ends: `Semantic Lookup` declines an identity question before the
+Qdrant call (`semanticBypass: 'personal_question'`; `semanticSkipped` stays
+`false`, so this does not pollute the outage metric), and `Index Question Vector`
+never puts one into the shared collection. One stale identity vector, and the
+cache entries poisoned while the test was failing, were purged.
+
+Acceptance test, run twice, all passing:
+
+| case | result |
+|---|---|
+| recognised visitor asks an ordinary question | no name in the answer |
+| **stranger** asks the same question | 2.1 s cache hit, no name |
+| **different** visitor asks it | 2.2 s cache hit, no name |
+| recognised visitor asks "Who am I?" | "You are Mariam Badawi." |
+| **stranger** asks "Who am I?" | "I'm sorry, I don't recognize you." |
+
+A name-bearing answer does still sit under the recognised visitor's *private*
+key. That is the design working, and the stranger case proves it is unreachable.
+
+**Load-bearing, not cosmetic:** sharing is safe *because* ordinary answers carry
+no name. If a later prompt change lets the agent address people by name again,
+those answers will be shared with strangers. The table above is the regression
+guard.
 
 ### Arabic punctuation was inside the tokeniser's "word" class
 
