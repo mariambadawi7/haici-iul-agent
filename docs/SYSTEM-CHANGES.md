@@ -27,10 +27,12 @@ Snapshot date: 2026-08-29. Branch: `admin-dashboard-and-white-labeling`.
 | RAG workflow | `btAR6oU4MThHIYy9` | 7 | yes | `RAG workflow.json` |
 | STT Webhook | `KNUv1TRbHWl3v6oS` | 5 | yes | `STT Webhook.json` |
 
-`agent_workflow_fixed.json` (27 nodes) corresponds to no live workflow — it is
-an abandoned mid-2026 snapshot of the Agent Workflow kept under a name that
-invites mistaking it for the good copy. It was deliberately **not** refreshed;
-delete it once nothing references it.
+`agent_workflow_fixed.json` was deleted on 2026-09-01. It was an abandoned
+27-node snapshot of the Agent Workflow, kept under a name that invited
+mistaking it for the good copy — and it carried the **real workflow id**
+`d8nftRI2zhutW98L`, so importing or `PUT`-ing it would have overwritten the live
+43-node workflow with a version whose only distinguishing nodes were the audio
+branch removed in §7. Recoverable from commit `69f19ac` if ever needed.
 
 Note the instance carries duplicate names — three "STT Webhook", two "Agent
 Workflow". Match on **id**, not name, and check `active`.
