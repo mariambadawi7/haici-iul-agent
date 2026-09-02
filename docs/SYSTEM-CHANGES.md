@@ -1361,6 +1361,71 @@ has been holding port 5199 and ~267 MB for over a day.
 
 ---
 
+### Language folded into the cache key — and the semantic tier fenced with it
+
+Closes the open defect recorded above. The requested change was "add language to
+the cache key", and that alone would not have fixed it: the crossing never went
+through the exact key at all. Both halves shipped together.
+
+**Why the key alone is not enough.** The exact tier hashes the normalised
+question text, and an Arabic question and its English translation produce
+different text and therefore different hashes already — they could never collide.
+The reuse happened one layer down, in the semantic tier: `Embed Question` uses a
+multilingual embedding model, so a question and its translation land beside each
+other in vector space, and `Judge Same Question` is told in as many words that
+*"differences in wording, formality, word order, spelling, or language (English
+vs Arabic) do NOT make them different."* `Semantic Lookup` then fetched the
+candidate by ITS stored hash — walking past the exact key exactly as it once
+walked past the per-visitor key (§7). The write-back afterwards cached that
+answer under the asker's own key, which is the step that made it permanent.
+
+**What changed.**
+
+1. `Normalize & Hash Question` derives `questionLanguage` with the same Arabic
+   script test the logger uses, so the key and the logged `language` column can
+   never disagree, and appends `|lang:<xx>` to the key. The suffix goes **last**,
+   after the optional `|visitor:` one, so the two compose in a fixed order.
+2. `Correct Domain Terms` mirrors it for the corrected-text dual write, taking
+   the language from the primary hasher rather than re-deriving it — a correction
+   can add or drop Arabic characters, and the two hashes must not land in
+   different language buckets.
+3. `Index Question Vector` writes `language` into the Qdrant payload.
+4. `Semantic Lookup` filters the Qdrant search on that payload field, and
+   re-checks the returned candidate before accepting it. A mismatch returns
+   `semanticBypass: 'language_mismatch'` with `semanticSkipped: false` — the tier
+   is declining on purpose, so it does not pollute the outage metric, the same
+   convention the personal-question bypass uses.
+
+The judge prompt was deliberately left alone. Its language clause is now
+unreachable, because candidates are filtered before they ever reach it, and
+re-tuning a prompt whose SAME/DIFFERENT calibration §2 spent real effort on is
+not worth the risk for a line that no longer executes.
+
+**Verified.** Seeded the Arabic side, then asked the English equivalent that
+previously reproduced the bug:
+
+| # | Turn | `match_type` | Answer language |
+|---|---|---|---|
+| 534 | `ما هو HAICI؟` | `fresh` | AR |
+| 535 | `ما هو HAICI؟` again | `cache_hit` (82 ms) | AR |
+| 536 | `what is HAICI?` | **`fresh`** | **EN** |
+| 537 | `tell me about HAICI` | **`semantic_hit`** (1.5 s) | EN |
+
+536 is the defect, fixed. 537 matters just as much: it proves the tier was
+fenced rather than disabled — same-language semantic reuse still works. Full
+battery of 9 paths passes with no blank answers, and the privacy suite still
+reports 21/21 with 0 leaked.
+
+**Cost, which belongs in the report.** The key format changed, so every entry
+written before it is unreachable: 102 Redis keys and 101 Qdrant points went cold
+in one step, and the two languages no longer share a cache entry at all. That
+second cost is the real trade — it is the price of never serving an answer in a
+language the visitor did not ask in. `cache_key_audit.py` was updated to rebuild
+keys in the new format; stale-format entries now report as `UNVERIFIED` (they are
+unreachable and age out on TTL) rather than being mistaken for shared keys.
+
+---
+
 ---
 
 ## 8. Cross-cutting design principles worth naming in the report

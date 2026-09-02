@@ -11,7 +11,9 @@ a private per-visitor key (fine) or a shared one (a leak).
 
 Anything it cannot positively classify is reported as UNVERIFIED rather than
 assumed safe: a corrected question is cached under a hash of the corrected text,
-so its stored `question` will not always reproduce the key.
+so its stored `question` will not always reproduce the key. Entries written
+before the language suffix was added to the key format are UNVERIFIED for the
+same reason -- they are unreachable by the running workflow and age out on TTL.
 """
 import json, os, re, subprocess, sys
 
@@ -37,6 +39,7 @@ def redis(*args):
     return out.stdout.strip()
 
 NAME_FORMS = {"Mariam Badawi": ["mariam", "مريم"], "Omar Khalil": ["omar", "عمر"]}
+LANGS = ("en", "ar")
 
 keys = [k for k in redis("KEYS", "faq:*").splitlines() if k.strip()]
 print("cache entries: %d" % len(keys))
@@ -60,9 +63,16 @@ for k in keys:
     if not who:
         continue
     n = normalise(q)
-    if k == "faq:" + djb2(n):
+    # Key format mirrors `Normalize & Hash Question`: the visitor suffix (identity
+    # questions only) then the language suffix, in that fixed order. The language
+    # is tried both ways rather than re-derived, because the stored `question` may
+    # be the CORRECTED text and a correction can add or drop Arabic characters.
+    shared = ["faq:" + djb2(n + "|lang:" + lg) for lg in LANGS]
+    priv = ["faq:" + djb2(n + "|visitor:" + v.lower() + "|lang:" + lg)
+            for v in VISITORS for lg in LANGS]
+    if k in shared:
         leaks.append((k, q))
-    elif any(k == "faq:" + djb2(n + "|visitor:" + v.lower()) for v in VISITORS):
+    elif k in priv:
         private.append((k, q))
     else:
         unverified.append((k, q))
