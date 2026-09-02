@@ -77,6 +77,17 @@ A Vite + React 18 + TypeScript + Tailwind app. Key shape:
 - **`ErrorBoundary` and `HealthBanner`.** `main.tsx` wraps `<App>` in `ErrorBoundary` so a render crash shows a recovery screen instead of a blank page. `App.tsx` runs `checkHealth()` on mount and shows an amber banner at the top whenever the n8n webhook is unreachable or the workflow is inactive.
 - **State machine for the avatar** lives in `web/src/App.tsx` and resolves a single `FaceState` (`idle | listening | thinking | speaking`) from the union of TTS/STT/pending booleans. Whichever renderer is active (see § The avatar) reads that one prop plus an `amplitude` 0..1 driven by a WebAudio AnalyserNode tap on the playback element — that's where the lip-sync comes from. When TTS is off, `App.tsx` synthesises the envelope from the reply's length instead, so the mouth still moves on text-only turns.
 - **The frontend ONLY talks to the n8n webhook.** It does not call any STT/TTS service directly — the workflows handle both and return audio as `audioBase64`. The only env var that matters is `VITE_N8N_WEBHOOK_URL` (default `/webhook/rag-agent` — relative).
+- **The kiosk is served over HTTPS, and `http://` gives no response at all.**
+  `VITE_HTTPS=1` is set in `.env`, so Vite runs the `basicSsl` plugin and speaks
+  TLS on 5173. Browsing to `http://localhost:5173` therefore fails with
+  `ERR_EMPTY_RESPONSE` — the TLS listener gets plaintext and closes, so there is
+  no HTTP error to report. **Use `https://localhost:5173/`** (and
+  `https://localhost:5173/#/admin`). It is on because the mic and camera need a
+  secure context on a tablet reached by LAN IP, which `http://<ip>` is not.
+  The self-signed cert's SAN covers only `localhost`/`127.0.0.1`, so a LAN IP
+  raises a name-mismatch warning that must be accepted once per device. To go
+  back to plain HTTP on the kiosk machine alone, unset `VITE_HTTPS` and
+  `docker compose up -d --force-recreate web`.
 - **CORS is sidestepped via a Vite reverse-proxy.** `web/vite.config.ts` proxies `/webhook/*` to `http://n8n:5678/webhook/*` over the Docker network. The browser only ever talks to `localhost:5173`, so the request is same-origin and CORS never gets a vote. If a turn fails with "Could not reach the workflow through the Vite proxy", the web container can't resolve `n8n:5678` — usually fixed by `docker compose up -d --force-recreate web`.
 - **Two request shapes** to the same webhook:
   - **Text turn:** `POST application/json` with body `{ sessionId, text, wantsAudio }`. The workflow's `Set userText (Text)` node reads `body.text`.
