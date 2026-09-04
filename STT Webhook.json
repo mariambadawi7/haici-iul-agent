@@ -87,7 +87,10 @@
           "id": "r2wgetIKHoEeimcZ",
           "name": "Bearer Auth account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -184,5 +187,5 @@
   "pinData": {},
   "meta": {},
   "id": "KNUv1TRbHWl3v6oS",
-  "versionId": "9d9b1837-0d99-43ef-be70-2536b8d157aa"
+  "versionId": "bb169317-8c41-4974-b6a0-e66f6847026b"
 }
