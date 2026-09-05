@@ -54,12 +54,27 @@ function withoutTransitions(mutate: () => void) {
     "*,*::before,*::after{transition:none !important;animation-duration:0s !important}";
   document.head.appendChild(freeze);
 
-  mutate();
-
-  // Force a synchronous style flush so the new values are committed while
-  // transitions are still disabled, then restore them on the next frame.
-  void document.body?.offsetHeight;
-  requestAnimationFrame(() => freeze.remove());
+  // The freeze MUST be lifted on every exit path. Leaving it behind disables
+  // every transition and animation in the app for the lifetime of the
+  // document, and only a reload clears it.
+  try {
+    mutate();
+  } finally {
+    // Force a synchronous style flush so the new values are committed while
+    // transitions are still disabled, then restore them on the next frame.
+    void document.body?.offsetHeight;
+    // rAF does not fire in a backgrounded tab, so a timer backstops it: an
+    // operator who saves and immediately switches tabs would otherwise hold
+    // the freeze until they came back.
+    let lifted = false;
+    const lift = () => {
+      if (lifted) return;
+      lifted = true;
+      freeze.remove();
+    };
+    requestAnimationFrame(lift);
+    setTimeout(lift, 250);
+  }
 }
 
 export function applyTheme(config: TenantConfig) {
