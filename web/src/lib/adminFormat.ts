@@ -80,10 +80,16 @@ export function truncate(text: string, max = 140): string {
   return `${text.slice(0, max).trimEnd()}…`;
 }
 
-/** Minimal CSV cell escaping — wraps in quotes when the value contains a
- *  comma, quote, or newline, doubling any embedded quotes. */
+/** Minimal CSV cell escaping. Quotes when the value contains a comma, quote or
+ *  newline, doubling any embedded quotes — and prefixes a single quote to any
+ *  value that a spreadsheet would treat as a formula. The question and answer
+ *  columns carry text typed by anonymous kiosk visitors, and downloadCsv adds a
+ *  BOM specifically so Excel opens the file, so an unescaped leading `=` is a
+ *  live formula in the administrator's spreadsheet. */
 function csvCell(value: unknown): string {
-  const s = value === null || value === undefined ? "" : String(value);
+  let s = value === null || value === undefined ? "" : String(value);
+  // Excel/Sheets/LibreOffice treat these leading characters as formula starts.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
