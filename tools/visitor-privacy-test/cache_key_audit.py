@@ -17,6 +17,16 @@ same reason -- they are unreachable by the running workflow and age out on TTL.
 """
 import json, os, re, subprocess, sys
 
+# Windows consoles default to cp1252, and half of these questions are Arabic.
+# Printing one raised UnicodeEncodeError *after* the classification had already
+# run, so the audit died with a traceback and a non-zero exit that looked like a
+# tool crash rather than a verdict. Force UTF-8 on the way out.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 VISITORS = ["Mariam Badawi", "Omar Khalil"]
 
 def djb2(s):
@@ -32,10 +42,24 @@ def normalise(raw):
     return re.sub(r"\s+", " ", s).strip()
 
 def redis(*args):
+    """Run one redis-cli command, or die.
+
+    redis-cli reports an auth failure on stdout and still exits 0, so a missing
+    REDIS_PASSWORD used to come back as an empty key list -- and this script
+    then cheerfully reported "0 LEAKED" having read nothing at all. That is the
+    same vacuous pass the language-fence drift caused, and it is the worst
+    failure mode a safety tool can have: it is indistinguishable from success.
+    Run it as `set -a; . ./.env; set +a` first.
+    """
     pw = os.environ.get("REDIS_PASSWORD", "")
     out = subprocess.run(["docker", "exec", "redis", "redis-cli", "-a", pw,
                           "--no-auth-warning"] + list(args),
                          capture_output=True, text=True, encoding="utf-8")
+    blob = (out.stdout or "") + (out.stderr or "")
+    if out.returncode != 0 or re.search(r"NOAUTH|WRONGPASS|AUTH failed|ERR ", blob):
+        sys.exit("redis-cli failed (%s): %s\n"
+                 "Load the environment first: set -a; . ./.env; set +a"
+                 % (" ".join(args), blob.strip()[:200]))
     return out.stdout.strip()
 
 NAME_FORMS = {"Mariam Badawi": ["mariam", "مريم"], "Omar Khalil": ["omar", "عمر"]}

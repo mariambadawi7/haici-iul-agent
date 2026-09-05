@@ -19,6 +19,16 @@ Exit code 1 on any failure, so it can gate a deploy.
 """
 import json, sys, time, urllib.request
 
+# Windows consoles default to cp1252, and half of these questions are Arabic.
+# Printing one raised UnicodeEncodeError *after* the classification had already
+# run, so the audit died with a traceback and a non-zero exit that looked like a
+# tool crash rather than a verdict. Force UTF-8 on the way out.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 URL = "http://localhost:5678/webhook/rag-agent"
 
 # The agent transliterates when answering in Arabic, so a Latin-only check
