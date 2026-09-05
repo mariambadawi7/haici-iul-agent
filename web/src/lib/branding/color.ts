@@ -113,7 +113,13 @@ const triplet = (rgb: [number, number, number]): Triplet => rgb.join(" ");
  * tints rather than neon pastels.
  */
 export function buildRamp(hex: string): Ramp {
-  const base = rgbToHsl(...hexToRgb(hex));
+  const raw = rgbToHsl(...hexToRgb(hex));
+  // Keep the anchor inside the ramp's own extremes, otherwise the "darker" half
+  // computes lighter values than the anchor and the ramp inverts (S-02): a very
+  // dark anchor (lightness below DARK_EXTREME) — including the [0,0,0] that
+  // hexToRgb falls back to for an unparseable hex — would make stops 700-950
+  // come out lighter than 600.
+  const base = { ...raw, l: clamp(raw.l, DARK_EXTREME, LIGHT_EXTREME) };
   const out = {} as Ramp;
   for (const stop of STOPS) {
     const d = DISTANCE[stop];
@@ -149,7 +155,12 @@ export function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** Text colour that stays legible on top of `hex`. */
+/** Text colour that stays legible on top of `hex`.
+ *
+ *  0.179 is the WCAG crossover: the relative luminance at which white and black
+ *  give equal contrast. Above it, dark text wins; below it, white does. A
+ *  higher threshold puts white text on mid-light brands (amber, lime, mid
+ *  green) at roughly 2:1, well under AA's 4.5:1. */
 export function readableOn(hex: string): Triplet {
-  return luminance(hex) > 0.45 ? "15 23 42" : "255 255 255";
+  return luminance(hex) > 0.179 ? "15 23 42" : "255 255 255";
 }
