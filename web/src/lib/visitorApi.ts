@@ -43,6 +43,19 @@ export interface VisitorSummary extends Omit<VisitorRecord, "messages"> {
 
 const BASE = "/api/visitors";
 
+/**
+ * True for a uid this kiosk minted itself, as opposed to a gallery label a
+ * member of staff created by naming a photo file.
+ *
+ * The distinction is only ever used to decide whether a uid is safe to SAY.
+ * "Hello, Mariam Badawi" is a greeting; "Hello, v7f3a9c1b2d" is a machine
+ * talking to itself. Matched on the exact minted shape (see newUid in
+ * web/visitor-store.ts) rather than a `v` prefix, so a staff-enrolled Victor
+ * is not mistaken for a serial number.
+ */
+export const isGeneratedUid = (uid: string | null | undefined): boolean =>
+  !!uid && /^v[0-9a-f]{10}$/.test(uid);
+
 /** Short: this runs while someone is standing at the kiosk waiting to be greeted. */
 const TIMEOUT_MS = 6_000;
 

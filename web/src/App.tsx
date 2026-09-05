@@ -16,6 +16,7 @@ import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
 import { config, twoStage, type Visitor } from "./lib/api";
+import { isGeneratedUid } from "./lib/visitorApi";
 import { useTenant } from "./lib/branding/context";
 import type { Emotion, FaceState } from "./types";
 
@@ -254,7 +255,9 @@ export default function App() {
         // The name is for the agent to SAY. Prefer what the person told the
         // kiosk they are called over the gallery label, and never fall back to
         // an auto-enrolled uid — "hello v7f3a9c1b2d" is worse than "hello".
-        name: visitor.displayName ?? vision.signal.identity,
+        name:
+          visitor.displayName ??
+          (isGeneratedUid(vision.signal.identity) ? null : vision.signal.identity),
         emotion: vision.emotion,
         // The uid is for the workflow to KEY on. Separate field, separate job.
         uid: visitor.uid,
@@ -296,11 +299,12 @@ export default function App() {
       setView("chat");
 
       const uid = await visitor.awaitBinding(BIND_GRACE_MS);
-      // Prefer what the visitor actually told us they are called over the
-      // gallery label: an auto-enrolled uid like `v7f3a9c1b2d` is not a name,
-      // and greeting someone with it is worse than not greeting them by name
-      // at all.
-      const known = visitor.displayName ?? (uid && !uid.startsWith("v") ? uid : null) ?? name;
+      // Prefer what the visitor actually told us they are called. A gallery
+      // label is a usable name only when a person chose it -- an auto-enrolled
+      // uid like `v7f3a9c1b2d` is not one, and greeting someone with it is far
+      // worse than not greeting them by name at all.
+      const known =
+        visitor.displayName ?? (uid && !isGeneratedUid(uid) ? uid : null) ?? name;
 
       // The name comes from a face match, which can be wrong. It is phrased as
       // the visitor introducing themselves rather than as an assertion the

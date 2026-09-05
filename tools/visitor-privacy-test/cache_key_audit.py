@@ -15,7 +15,7 @@ so its stored `question` will not always reproduce the key. Entries written
 before the language suffix was added to the key format are UNVERIFIED for the
 same reason -- they are unreachable by the running workflow and age out on TTL.
 """
-import json, os, re, subprocess, sys
+import io, json, os, pathlib, re, subprocess, sys, urllib.parse
 
 # Windows consoles default to cp1252, and half of these questions are Arabic.
 # Printing one raised UnicodeEncodeError *after* the classification had already
@@ -28,6 +28,39 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 VISITORS = ["Mariam Badawi", "Omar Khalil"]
+
+# Where the Bun sidecar keeps face-bound visitor records. Every filename is a
+# uid, and a uid is now what the private cache suffix is built from.
+VISITOR_DIR = os.environ.get("VISITOR_DIR_HOST", "visitors")
+
+
+def known_uids():
+    """Every uid this kiosk has issued, plus the display name filed under it.
+
+    The private cache suffix moved from the visitor's NAME to their UID (see
+    tools/workflow-patches/01_visitor_uid_cache_key.py). Without reading these,
+    the audit still fails safe -- a uid-keyed entry simply lands in UNVERIFIED
+    rather than PRIVATE -- but it stops actually verifying anything, which is
+    the quiet way a safety tool turns into decoration.
+
+    Name forms are collected too, because a record's displayName is what will
+    appear in an answer, and it is not derivable from the uid.
+    """
+    uids, names = [], {}
+    d = pathlib.Path(VISITOR_DIR)
+    if not d.is_dir():
+        return uids, names
+    for f in sorted(d.glob("*.json")):
+        try:
+            rec = json.loads(io.open(f, encoding="utf-8").read())
+        except Exception:
+            continue
+        uid = rec.get("uid") or urllib.parse.unquote(f.stem)
+        uids.append(uid)
+        dn = (rec.get("profile") or {}).get("displayName")
+        if dn:
+            names[uid] = dn
+    return uids, names
 
 def djb2(s):
     h = 5381
@@ -65,6 +98,16 @@ def redis(*args):
 NAME_FORMS = {"Mariam Badawi": ["mariam", "مريم"], "Omar Khalil": ["omar", "عمر"]}
 LANGS = ("en", "ar")
 
+UIDS, UID_NAMES = known_uids()
+# Anyone the kiosk enrolled itself is scanned for too: an auto-enrolled visitor
+# has no name in VISITORS, but once they tell the kiosk what they are called
+# that name can reach an answer exactly like a staff-enrolled one can.
+for _uid, _dn in UID_NAMES.items():
+    NAME_FORMS.setdefault(_dn, [_dn.split()[0].lower()])
+    if _dn not in VISITORS:
+        VISITORS.append(_dn)
+print("visitor records on disk: %d (%d named)" % (len(UIDS), len(UID_NAMES)))
+
 keys = [k for k in redis("KEYS", "faq:*").splitlines() if k.strip()]
 print("cache entries: %d" % len(keys))
 leaks, private, unverified = [], [], []
@@ -92,8 +135,14 @@ for k in keys:
     # is tried both ways rather than re-derived, because the stored `question` may
     # be the CORRECTED text and a correction can add or drop Arabic characters.
     shared = ["faq:" + djb2(n + "|lang:" + lg) for lg in LANGS]
-    priv = ["faq:" + djb2(n + "|visitor:" + v.lower() + "|lang:" + lg)
-            for v in VISITORS for lg in LANGS]
+    # Both suffix forms are accepted. The UID form is what the workflow builds
+    # today; the name form is what it built before the uid change, and entries
+    # written then are still in Redis until their 30-day TTL expires. Treating
+    # a stale name-keyed entry as UNVERIFIED would be noise, not a finding --
+    # it is private either way, which is the property under audit.
+    suffixes = [v.lower() for v in VISITORS] + [u.lower() for u in UIDS]
+    priv = ["faq:" + djb2(n + "|visitor:" + s + "|lang:" + lg)
+            for s in suffixes for lg in LANGS]
     if k in shared:
         leaks.append((k, q))
     elif k in priv:
