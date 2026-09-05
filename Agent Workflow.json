@@ -57,7 +57,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function simpleHash(str) {\n  let hash = 5381;\n  for (let i = 0; i < str.length; i++) {\n    hash = ((hash << 5) + hash) + str.charCodeAt(i);\n    hash = hash & hash;\n  }\n  return (hash >>> 0).toString(16);\n}\n\n// Questions whose ANSWER depends on WHO is asking. These must never share a\n// cache entry between visitors: an answer of \"you are Mariam\" stored under\n// hash(\"who am i\") would be replayed to the next person who asks it.\n// This decides BOTH the cache key and whether the agent is shown the visitor's\n// name at all, so the two failure modes are asymmetric on purpose:\n//   over-matching  -> a shareable answer gets a private key. Costs a cache hit.\n//   under-matching -> the kiosk tells someone it can plainly see \"I don't\n//                     recognise you\". Costs trust.\n// So it is deliberately generous.\nconst PERSONAL = /(who am i|who i am|what'?s my name|what is my name|my name|do you know me|know who i am|recogni[sz]e me|remember me|who do you think i am|what do you know about me|have we met|who do you see|من انا|من أنا|ما اسمي|شو اسمي|اسمي|تعرفني|هل تعرفني|بتعرفني|تتذكرني|هل تتذكرني|بتتذكرني|تعرف عني|شو بتعرف عني)/;\n\nconst items = $input.all();\nreturn items.map(item => {\n  const raw = item.json.userText || '';\n  const normalized = raw.toLowerCase().trim().replace(/[^\\w\\s\\u0600-\\u06FF]/g, '').replace(/\\s+/g, ' ');\n  const visitorName = String(item.json.visitorName || '').trim();\n  const personal = PERSONAL.test(normalized);\n\n  // The language the question was asked in is part of its identity, because the\n  // cached ANSWER is written in that language. Two questions can mean the same\n  // thing and still need different entries: serving the Arabic answer to an\n  // English asker is not a cache hit, it is the wrong answer. Same script test\n  // the logger uses, so `questionLanguage` and the logged `language` agree.\n  const lang = /[\\u0600-\\u06FF]/.test(raw) ? 'ar' : 'en';\n\n  // Only questions whose ANSWER is about this person get a private key. An\n  // answer to \"what are the deadlines\" is the same for everyone, so keying it\n  // per visitor gave every recognised person a cold cache.\n  //\n  // An earlier version keyed EVERY question per visitor, because the agent used\n  // to open ordinary answers with \"Hello Mariam, ...\" and that must never be\n  // replayed to the next person. That is now prevented at the source instead:\n  // greetings are answered before the agent runs (see Detect Greeting), and the\n  // agent is instructed to use the name only for identity questions. If a name\n  // ever reaches an ordinary answer again, it WILL be shared — so that\n  // instruction is load-bearing, not cosmetic.\n  // `|lang:` goes LAST so the suffixes compose in one fixed order; anything\n  // that recomputes these keys (tools/visitor-privacy-test/cache_key_audit.py)\n  // has to build them the same way.\n  const keyBase = (personal && visitorName\n    ? normalized + '|visitor:' + visitorName.toLowerCase()\n    : normalized) + '|lang:' + lang;\n\n  item.json.normalizedQuestion = normalized;\n  item.json.questionHash = simpleHash(keyBase);\n  item.json.isPersonalQuestion = personal;\n  item.json.questionLanguage = lang;\n  item.json.visitorName = visitorName;\n  // Marked so the agent can tell camera output from user-typed text — and\n  // supplied ONLY for identity questions. Everything else is cached and shared,\n  // so a name in one of those answers would later be shown to the wrong person.\n  // Withholding it makes that structurally impossible instead of relying on the\n  // model to follow an instruction: it cannot leak a name it was never given.\n  // visitorName itself stays populated, because the greeting path still uses it.\n  item.json.visitorContext = (personal && visitorName)\n    ? '\\n\\n[kiosk camera: the person at the kiosk is ' + visitorName + ']'\n    : '';\n  item.json.startedAt = Date.now();\n  return item;\n});"
+        "jsCode": "function simpleHash(str) {\n  let hash = 5381;\n  for (let i = 0; i < str.length; i++) {\n    hash = ((hash << 5) + hash) + str.charCodeAt(i);\n    hash = hash & hash;\n  }\n  return (hash >>> 0).toString(16);\n}\n\n// Questions whose ANSWER depends on WHO is asking. These must never share a\n// cache entry between visitors: an answer of \"you are Mariam\" stored under\n// hash(\"who am i\") would be replayed to the next person who asks it.\n// This decides BOTH the cache key and whether the agent is shown the visitor's\n// name at all, so the two failure modes are asymmetric on purpose:\n//   over-matching  -> a shareable answer gets a private key. Costs a cache hit.\n//   under-matching -> the kiosk tells someone it can plainly see \"I don't\n//                     recognise you\". Costs trust.\n// So it is deliberately generous.\nconst PERSONAL = /(who am i|who i am|what'?s my name|what is my name|my name|do you know me|know who i am|recogni[sz]e me|remember me|who do you think i am|what do you know about me|have we met|who do you see|من انا|من أنا|ما اسمي|شو اسمي|اسمي|تعرفني|هل تعرفني|بتعرفني|تتذكرني|هل تتذكرني|بتتذكرني|تعرف عني|شو بتعرف عني)/;\n\n// A copy of the GREET regex from `Detect Greeting` -- kept in sync BY HAND,\n// because n8n Code nodes cannot import a shared module. This copy only has to\n// be a superset: its one job is to decide whether the ANSWER to this turn\n// could be personalised. Over-matching costs a shared cache entry;\n// under-matching leaks a name. So err towards matching.\nconst GREET = /(^|\\s)(hello|hi|hey|hiya|greetings|good morning|good afternoon|good evening|salam|salaam|assalamu alaikum|مرحبا|اهلا|أهلا|اهلين|السلام عليكم|صباح الخير|مساء الخير)(\\s|$)/;\n\nconst items = $input.all();\nreturn items.map(item => {\n  const raw = item.json.userText || '';\n  const normalized = raw.toLowerCase().trim().replace(/[^\\w\\s\\u0600-\\u06FF]/g, '').replace(/\\s+/g, ' ');\n  const visitorName = String(item.json.visitorName || '').trim();\n  const personal = PERSONAL.test(normalized);\n\n  // The language the question was asked in is part of its identity, because the\n  // cached ANSWER is written in that language. Two questions can mean the same\n  // thing and still need different entries: serving the Arabic answer to an\n  // English asker is not a cache hit, it is the wrong answer. Same script test\n  // the logger uses, so `questionLanguage` and the logged `language` agree.\n  const lang = /[\\u0600-\\u06FF]/.test(raw) ? 'ar' : 'en';\n\n  // Only questions whose ANSWER is about this person get a private key. An\n  // answer to \"what are the deadlines\" is the same for everyone, so keying it\n  // per visitor gave every recognised person a cold cache.\n  //\n  // An earlier version keyed EVERY question per visitor, because the agent used\n  // to open ordinary answers with \"Hello Mariam, ...\" and that must never be\n  // replayed to the next person. That is now prevented at the source instead:\n  // greetings are answered before the agent runs (see Detect Greeting), and the\n  // agent is instructed to use the name only for identity questions. If a name\n  // ever reaches an ordinary answer again, it WILL be shared — so that\n  // instruction is load-bearing, not cosmetic.\n  // `|lang:` goes LAST so the suffixes compose in one fixed order; anything\n  // that recomputes these keys (tools/visitor-privacy-test/cache_key_audit.py)\n  // has to build them the same way.\n  // `Detect Greeting` answers a greeting inline and puts the visitor's name\n  // into the reply whether or not the utterance matches PERSONAL, so PERSONAL\n  // alone is the wrong fence: \"hello\" from a recognised visitor produced a\n  // named answer stored under the anonymous key. Greetings are also flagged\n  // noCache downstream, which is the primary fix; this is the second fence,\n  // for the case where a name reaches an answer by some route nobody has\n  // thought of yet. Note it scopes only the KEY: `isPersonalQuestion` and\n  // `visitorContext` below still follow PERSONAL, so the agent is still shown\n  // the name only for identity questions.\n  const couldCarryName = personal || GREET.test(normalized);\n  const keyBase = (couldCarryName && visitorName\n    ? normalized + '|visitor:' + visitorName.toLowerCase()\n    : normalized) + '|lang:' + lang;\n\n  item.json.normalizedQuestion = normalized;\n  item.json.questionHash = simpleHash(keyBase);\n  item.json.isPersonalQuestion = personal;\n  item.json.questionLanguage = lang;\n  item.json.visitorName = visitorName;\n  // Marked so the agent can tell camera output from user-typed text — and\n  // supplied ONLY for identity questions. Everything else is cached and shared,\n  // so a name in one of those answers would later be shown to the wrong person.\n  // Withholding it makes that structurally impossible instead of relying on the\n  // model to follow an instruction: it cannot leak a name it was never given.\n  // visitorName itself stays populated, because the greeting path still uses it.\n  item.json.visitorContext = (personal && visitorName)\n    ? '\\n\\n[kiosk camera: the person at the kiosk is ' + visitorName + ']'\n    : '';\n  item.json.startedAt = Date.now();\n  return item;\n});"
       },
       "id": "d1f2a3b4-1111-4a4a-9c9c-000000000001",
       "name": "Normalize & Hash Question",
@@ -400,7 +400,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// Aggregate all TTS chunk outputs, concatenate PCM, insert silence between chunks,\n// then wrap in a single WAV container.\n\n// The answer can arrive from any of three upstream branches: a fresh agent\n// answer, a clarification reply, or a cache hit. Referencing a node that did\n// not execute THROWS, so probe rather than assume which one ran — and degrade\n// to an empty answer instead of failing the whole turn if none of them did.\nfunction pickSource(name) {\n  try {\n    if (!$(name).isExecuted) return null;\n    const j = $(name).first().json;\n    // Executing is not the same as carrying an answer. `Detect Greeting` runs on\n    // EVERY non-cache-hit turn and passes non-greeting items straight through\n    // untouched, so it has no `answer` field — yet it is a non-null object and\n    // would win the || chain ahead of the branch that actually holds the answer.\n    // That blanked the text on semantic-hit + audio turns, and the blank was\n    // then written into the 30-day cache. Require a usable answer, not an object.\n    return (j && typeof j.answer === 'string' && j.answer.trim()) ? j : null;\n  } catch (e) {\n    return null;\n  }\n}\nconst source = pickSource('Keep Answer Text')\n  || pickSource('Build Clarification Reply')\n  || pickSource('Detect Greeting')\n  || pickSource('Parse Cached Response')\n  || {};\nconst answer = source.answer || '';\nconst question = source.question || '';\n\n// Graceful no-audio fallback\nconst NO_AUDIO = [{ json: { answer, question, audioMime: '', audioBase64: '' } }];\n\n// Collect all items, sorted by chunkIndex\nconst items = $input.all();\nif (!items || items.length === 0) return NO_AUDIO;\n\n// Sort by chunkIndex (should already be in order, but be safe)\nitems.sort((a, b) => (a.json.chunkIndex ?? 0) - (b.json.chunkIndex ?? 0));\n\n// Extract PCM buffers and sample rates from each chunk\nconst pcmBuffers = [];\nconst sampleRates = [];\n\nfor (const item of items) {\n  const cands = item.json.candidates;\n  if (!cands || !cands[0] || !cands[0].content || !cands[0].content.parts || !cands[0].content.parts[0]) {\n    // Missing audio data for this chunk — degrade gracefully\n    return NO_AUDIO;\n  }\n  const part = cands[0].content.parts[0];\n  const pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\n  if (!pcmB64) return NO_AUDIO;\n\n  const mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\n  const m = mime.match(/rate=(\\d+)/);\n  const sr = m ? parseInt(m[1], 10) : 24000;\n\n  pcmBuffers.push(Buffer.from(pcmB64, 'base64'));\n  sampleRates.push(sr);\n}\n\n// Verify all chunks have the same sample rate; if not, fall back to first chunk only\nconst baseSampleRate = sampleRates[0];\nconst allSameRate = sampleRates.every(r => r === baseSampleRate);\n\nlet combinedPcm;\nif (!allSameRate) {\n  // Sample rate mismatch — use only first chunk to avoid garbled audio\n  combinedPcm = pcmBuffers[0];\n} else if (pcmBuffers.length === 1) {\n  combinedPcm = pcmBuffers[0];\n} else {\n  // Insert ~150ms silence (zero-filled 16-bit mono PCM) between chunks\n  const silenceByteCount = Math.round(baseSampleRate * 0.15) * 2; // 16-bit = 2 bytes/sample\n  const silence = Buffer.alloc(silenceByteCount, 0);\n\n  const parts = [];\n  for (let i = 0; i < pcmBuffers.length; i++) {\n    parts.push(pcmBuffers[i]);\n    if (i < pcmBuffers.length - 1) parts.push(silence);\n  }\n  combinedPcm = Buffer.concat(parts);\n}\n\n// Build 44-byte WAV header (mono, 16-bit LE)\nconst sampleRate = baseSampleRate;\nconst channels = 1;\nconst bitsPerSample = 16;\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\n\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + combinedPcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);          // PCM format\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(combinedPcm.length, 40);\n\nconst wav = Buffer.concat([h, combinedPcm]);\n\nreturn [{ json: { answer, question, audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];\n"
+        "jsCode": "\n// Aggregate all TTS chunk outputs, concatenate PCM, insert silence between chunks,\n// then wrap in a single WAV container.\n\n// The answer can arrive from any of three upstream branches: a fresh agent\n// answer, a clarification reply, or a cache hit. Referencing a node that did\n// not execute THROWS, so probe rather than assume which one ran — and degrade\n// to an empty answer instead of failing the whole turn if none of them did.\nfunction pickSource(name) {\n  try {\n    if (!$(name).isExecuted) return null;\n    const j = $(name).first().json;\n    // Executing is not the same as carrying an answer. `Detect Greeting` runs on\n    // EVERY non-cache-hit turn and passes non-greeting items straight through\n    // untouched, so it has no `answer` field — yet it is a non-null object and\n    // would win the || chain ahead of the branch that actually holds the answer.\n    // That blanked the text on semantic-hit + audio turns, and the blank was\n    // then written into the 30-day cache. Require a usable answer, not an object.\n    return (j && typeof j.answer === 'string' && j.answer.trim()) ? j : null;\n  } catch (e) {\n    return null;\n  }\n}\n// Order matters as much as the emptiness check above. `Parse Cached Response`\n// moves ahead of `Detect Greeting` because Detect Greeting runs on EVERY\n// non-cache-hit turn: leaving it earlier works only for as long as the\n// emptiness check holds, and the two together survive the next branch someone\n// adds without reading this chain.\nconst source = pickSource('Keep Answer Text')\n  || pickSource('Parse Cached Response')\n  || pickSource('Build Clarification Reply')\n  || pickSource('Detect Greeting')\n  || {};\nconst answer = source.answer || '';\nconst question = source.question || '';\n// Carried through because this node is the only thing standing between the\n// greeting branch and `Save Audio to Cache`: the items on $input are TTS\n// chunks, and they have lost every field the original turn carried.\nconst noCache = source.noCache === true;\n\n// Graceful no-audio fallback\nconst NO_AUDIO = [{ json: { answer, question, noCache, audioMime: '', audioBase64: '' } }];\n\n// Collect all items, sorted by chunkIndex\nconst items = $input.all();\nif (!items || items.length === 0) return NO_AUDIO;\n\n// Sort by chunkIndex (should already be in order, but be safe)\nitems.sort((a, b) => (a.json.chunkIndex ?? 0) - (b.json.chunkIndex ?? 0));\n\n// Extract PCM buffers and sample rates from each chunk\nconst pcmBuffers = [];\nconst sampleRates = [];\n\nfor (const item of items) {\n  const cands = item.json.candidates;\n  if (!cands || !cands[0] || !cands[0].content || !cands[0].content.parts || !cands[0].content.parts[0]) {\n    // Missing audio data for this chunk — degrade gracefully\n    return NO_AUDIO;\n  }\n  const part = cands[0].content.parts[0];\n  const pcmB64 = part?.inlineData?.data || part?.inline_data?.data;\n  if (!pcmB64) return NO_AUDIO;\n\n  const mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || '';\n  const m = mime.match(/rate=(\\d+)/);\n  const sr = m ? parseInt(m[1], 10) : 24000;\n\n  pcmBuffers.push(Buffer.from(pcmB64, 'base64'));\n  sampleRates.push(sr);\n}\n\n// Verify all chunks have the same sample rate; if not, fall back to first chunk only\nconst baseSampleRate = sampleRates[0];\nconst allSameRate = sampleRates.every(r => r === baseSampleRate);\n\nlet combinedPcm;\nif (!allSameRate) {\n  // Sample rate mismatch — use only first chunk to avoid garbled audio\n  combinedPcm = pcmBuffers[0];\n} else if (pcmBuffers.length === 1) {\n  combinedPcm = pcmBuffers[0];\n} else {\n  // Insert ~150ms silence (zero-filled 16-bit mono PCM) between chunks\n  const silenceByteCount = Math.round(baseSampleRate * 0.15) * 2; // 16-bit = 2 bytes/sample\n  const silence = Buffer.alloc(silenceByteCount, 0);\n\n  const parts = [];\n  for (let i = 0; i < pcmBuffers.length; i++) {\n    parts.push(pcmBuffers[i]);\n    if (i < pcmBuffers.length - 1) parts.push(silence);\n  }\n  combinedPcm = Buffer.concat(parts);\n}\n\n// Build 44-byte WAV header (mono, 16-bit LE)\nconst sampleRate = baseSampleRate;\nconst channels = 1;\nconst bitsPerSample = 16;\nconst byteRate = sampleRate * channels * bitsPerSample / 8;\nconst blockAlign = channels * bitsPerSample / 8;\n\nconst h = Buffer.alloc(44);\nh.write('RIFF', 0);\nh.writeUInt32LE(36 + combinedPcm.length, 4);\nh.write('WAVE', 8);\nh.write('fmt ', 12);\nh.writeUInt32LE(16, 16);\nh.writeUInt16LE(1, 20);          // PCM format\nh.writeUInt16LE(channels, 22);\nh.writeUInt32LE(sampleRate, 24);\nh.writeUInt32LE(byteRate, 28);\nh.writeUInt16LE(blockAlign, 32);\nh.writeUInt16LE(bitsPerSample, 34);\nh.write('data', 36);\nh.writeUInt32LE(combinedPcm.length, 40);\n\nconst wav = Buffer.concat([h, combinedPcm]);\n\nreturn [{ json: { answer, question, noCache, audioMime: 'audio/wav', audioBase64: wav.toString('base64') } }];\n"
       },
       "id": "e55d005f-da8d-47c5-b7ea-56b46c009b98",
       "name": "Build JSON (Text + Audio)",
@@ -1205,7 +1205,7 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: `A university receptionist caches answers. Decide whether the stored answer to Question A can be reused for Question B.\\n\\nQuestion A: ${$json.candidateQuestion}\\nQuestion B: ${$('Correct Domain Terms').first().json.userText}\\n\\nAnswer SAME if both questions request the same information. Differences in wording, formality, word order, spelling, or language (English vs Arabic) do NOT make them different.\\n\\nAnswer DIFFERENT only if they ask about genuinely different things - a different semester, a different degree level, a different campus, a different department, or a different kind of detail (for example phone vs email, or president vs founder).\\n\\nReply with exactly one word: SAME or DIFFERENT.` } ] } ], generationConfig: { temperature: 0, maxOutputTokens: 16, thinkingConfig: { thinkingBudget: 0 } } }) }}",
+        "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: `A university receptionist caches answers. Decide whether the stored answer to Question A can be reused for Question B.\\n\\nQuestion A: ${$json.candidateQuestion}\\nQuestion B: ${$('Correct Domain Terms').first().json.userText}\\n\\nAnswer SAME if both questions request the same information. Differences in wording, formality, word order, or spelling do NOT make them different.\\n\\nTwo questions asked in DIFFERENT LANGUAGES are NEVER the same question: if one is in Arabic and the other in English, answer DIFFERENT. The stored answer is written in the language its question was asked in, so reusing it across languages returns the wrong language, not a cache hit.\\n\\nAnswer DIFFERENT only if they ask about genuinely different things - a different semester, a different degree level, a different campus, a different department, or a different kind of detail (for example phone vs email, or president vs founder).\\n\\nReply with exactly one word: SAME or DIFFERENT.` } ] } ], generationConfig: { temperature: 0, maxOutputTokens: 16, thinkingConfig: { thinkingBudget: 0 } } }) }}",
         "options": {
           "timeout": 30000
         }
@@ -1309,7 +1309,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// A greeting needs no document lookup and no semantic-cache probe. Answering it\n// inline turns a ~20 s first impression into a sub-second one — measured: a\n// greeting that missed cache cost 21-23 s, almost all of it Embed Question and\n// the agent, for a reply that never depended on either.\n//\n// Deliberately STRICTER than the greeting test in Anonymize Log Entry: that one\n// only labels a row after the fact, whereas a false positive HERE answers a real\n// question with \"how can I help you?\". So a greeting only short-circuits when\n// the whole utterance is a greeting (a self-introduction is allowed).\nconst GREET = /(^|\\s)(hello|hi|hey|hiya|greetings|good morning|good afternoon|good evening|salam|salaam|assalamu alaikum|مرحبا|اهلا|أهلا|اهلين|السلام عليكم|صباح الخير|مساء الخير)(\\s|$)/;\n// Anything that smells like an actual request disqualifies it, so\n// \"hello, what are the deadlines?\" still reaches the agent.\nconst ASKS = /(^|\\s)(what|where|when|how|why|who|which|can|could|do|does|did|is|are|was|tell|need|want|apply|cost|price|fee|fees|deadline|deadlines|register|registration|admission|admissions|program|programs|campus|scholarship|scholarships|ما|ماذا|أين|اين|متى|كيف|لماذا|من|هل|كم|أريد|اريد|بدي)(\\s|$)/;\n\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const raw = String(j.userText || '');\n  const norm = raw.toLowerCase().replace(/[^\\p{L}\\p{N}\\s]/gu, ' ').replace(/\\s+/g, ' ').trim();\n  const words = norm ? norm.split(' ') : [];\n\n  const isGreeting =\n    !!norm &&\n    words.length <= 8 &&\n    !/[?\\u061F]/.test(raw) &&\n    GREET.test(norm) &&\n    !ASKS.test(norm);\n\n  if (!isGreeting) {\n    // Pass through untouched so the normal path sees exactly what it did before.\n    item.json.isGreeting = false;\n    out.push(item);\n    continue;\n  }\n\n  let visitorName = '';\n  try {\n    visitorName = String($('Normalize & Hash Question').first().json.visitorName || '').trim();\n  } catch (e) { visitorName = ''; }\n\n  let wantsAudio = true;\n  try {\n    wantsAudio = String($('Webhook').first().json.body?.wantsAudio) !== 'false';\n  } catch (e) { wantsAudio = true; }\n\n  const arabic = /[\\u0600-\\u06FF]/.test(raw);\n  const who = visitorName ? ' ' + visitorName : '';\n  // No institution name on purpose: this deployment is white-labelled at runtime\n  // (see the branding system), so hard-coding one here would be wrong for every\n  // other tenant.\n  const answer = arabic\n    ? 'أهلاً' + who + '! كيف يمكنني مساعدتك؟'\n    : 'Hello' + who + '! How can I help you today?';\n\n  item.json.isGreeting = true;\n  item.json.answer = answer;\n  item.json.question = raw;\n  item.json.wantsAudio = wantsAudio;\n  item.json.matchType = 'greeting';\n  item.json.audioBase64 = '';\n  item.json.audioMime = '';\n  out.push(item);\n}\nreturn out;\n",
+        "jsCode": "// A greeting needs no document lookup and no semantic-cache probe. Answering it\n// inline turns a ~20 s first impression into a sub-second one — measured: a\n// greeting that missed cache cost 21-23 s, almost all of it Embed Question and\n// the agent, for a reply that never depended on either.\n//\n// Deliberately STRICTER than the greeting test in Anonymize Log Entry: that one\n// only labels a row after the fact, whereas a false positive HERE answers a real\n// question with \"how can I help you?\". So a greeting only short-circuits when\n// the whole utterance is a greeting (a self-introduction is allowed).\n// Kept in sync BY HAND with the copy in `Normalize & Hash Question`, which\n// needs it to decide whether a turn's answer could carry the visitor's name.\n// n8n Code nodes cannot import a shared module, so if you edit one, edit both.\nconst GREET = /(^|\\s)(hello|hi|hey|hiya|greetings|good morning|good afternoon|good evening|salam|salaam|assalamu alaikum|مرحبا|اهلا|أهلا|اهلين|السلام عليكم|صباح الخير|مساء الخير)(\\s|$)/;\n// Anything that smells like an actual request disqualifies it, so\n// \"hello, what are the deadlines?\" still reaches the agent.\nconst ASKS = /(^|\\s)(what|where|when|how|why|who|which|can|could|do|does|did|is|are|was|tell|need|want|apply|cost|price|fee|fees|deadline|deadlines|register|registration|admission|admissions|program|programs|campus|scholarship|scholarships|ما|ماذا|أين|اين|متى|كيف|لماذا|من|هل|كم|أريد|اريد|بدي)(\\s|$)/;\n\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const raw = String(j.userText || '');\n  const norm = raw.toLowerCase().replace(/[^\\p{L}\\p{N}\\s]/gu, ' ').replace(/\\s+/g, ' ').trim();\n  const words = norm ? norm.split(' ') : [];\n\n  const isGreeting =\n    !!norm &&\n    words.length <= 8 &&\n    !/[?\\u061F]/.test(raw) &&\n    GREET.test(norm) &&\n    !ASKS.test(norm);\n\n  if (!isGreeting) {\n    // Pass through untouched so the normal path sees exactly what it did before.\n    item.json.isGreeting = false;\n    out.push(item);\n    continue;\n  }\n\n  let visitorName = '';\n  try {\n    visitorName = String($('Normalize & Hash Question').first().json.visitorName || '').trim();\n  } catch (e) { visitorName = ''; }\n\n  let wantsAudio = true;\n  try {\n    wantsAudio = String($('Webhook').first().json.body?.wantsAudio) !== 'false';\n  } catch (e) { wantsAudio = true; }\n\n  const arabic = /[\\u0600-\\u06FF]/.test(raw);\n  const who = visitorName ? ' ' + visitorName : '';\n  // No institution name on purpose: this deployment is white-labelled at runtime\n  // (see the branding system), so hard-coding one here would be wrong for every\n  // other tenant.\n  const answer = arabic\n    ? 'أهلاً' + who + '! كيف يمكنني مساعدتك؟'\n    : 'Hello' + who + '! How can I help you today?';\n\n  item.json.isGreeting = true;\n  item.json.answer = answer;\n  item.json.question = raw;\n  item.json.wantsAudio = wantsAudio;\n  item.json.matchType = 'greeting';\n  item.json.audioBase64 = '';\n  item.json.audioMime = '';\n  // This is the one answer in the workflow built inline from the visitor's\n  // NAME, and \"hello\" does not match the PERSONAL regex in\n  // `Normalize & Hash Question` -- so without this flag the reply is stored\n  // under the SHARED key hash('hello|lang:en') and replayed, in text and in\n  // synthesised speech, to the next person who says hello. Never caching it\n  // costs nothing: this branch makes no model call, so it is already\n  // sub-second. Read by `IF (Cacheable?)` and `IF (Cacheable? Audio)`.\n  item.json.noCache = true;\n  out.push(item);\n}\nreturn out;\n",
         "mode": "runOnceForAllItems"
       },
       "id": "b1e7c0de-0000-4000-8000-000000000001",
@@ -1354,6 +1354,110 @@
         528,
         620
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-cacheable-nocache-noaudio",
+              "leftValue": "={{ $json.noCache !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cond-cacheable-answer-noaudio",
+              "leftValue": "={{ ($json.answer || '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        352,
+        880
+      ],
+      "id": "f0102-cacheable-noaudio",
+      "name": "IF (Cacheable?)",
+      "notes": "Nothing reaches the 30-day cache without passing here. Two ways a write used to be wrong: a greeting carries the visitor's NAME and must never be shared (noCache), and an empty answer from a broken fan-in used to be written back and then served blank to everyone who asked that question for the next 30 days."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-cacheable-nocache-audio",
+              "leftValue": "={{ $json.noCache !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cond-cacheable-answer-audio",
+              "leftValue": "={{ ($json.answer || '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        48
+      ],
+      "id": "f0102-cacheable-audio",
+      "name": "IF (Cacheable? Audio)",
+      "notes": "Nothing reaches the 30-day cache without passing here. Two ways a write used to be wrong: a greeting carries the visitor's NAME and must never be shared (noCache), and an empty answer from a broken fan-in used to be written back and then served blank to everyone who asked that question for the next 30 days."
+    },
+    {
+      "parameters": {
+        "jsCode": "// TTS failed and n8n routed the item to the error output. Those items come from\n// `Split Answer Into Chunks`, which emits { chunkIndex, text, totalChunks } --\n// there is no `answer` on them, so `Respond (Text Only)` was evaluating\n// { answer: undefined, question: undefined } and n8n serialised that to `{}`:\n// the visitor got an empty bubble and no error at all. The answer was never the\n// problem, it is sitting upstream. Recover it, so losing the voice degrades the\n// turn to text instead of losing the turn.\nfunction pick(name) {\n  try {\n    if (!$(name).isExecuted) return null;\n    const j = $(name).first().json;\n    return (j && typeof j.answer === 'string' && j.answer.trim() !== '') ? j : null;\n  } catch (e) { return null; }\n}\nconst src = pick('Keep Answer Text')\n  || pick('Parse Cached Response')\n  || pick('Build Clarification Reply')\n  || pick('Detect Greeting')\n  || {};\n\nreturn [{\n  json: {\n    answer: src.answer || '',\n    question: src.question || '',\n    // No audio was produced. Say so explicitly rather than let the cache write\n    // downstream inherit a stale field from somewhere else.\n    audioBase64: '',\n    audioMime: '',\n    // A greeting still must not be cached just because TTS is what failed.\n    noCache: src.noCache === true,\n    ttsFailed: true,\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        656
+      ],
+      "id": "f03-recover-after-tts",
+      "name": "Recover Answer After TTS Failure",
+      "notes": "Sits on Gemini TTS's error output. Without it a 429 from Gemini cost the visitor the whole answer AND skipped the cache write, so the next asker paid the full generation cost again."
     }
   ],
   "connections": {
@@ -1556,12 +1660,7 @@
             "index": 0
           },
           {
-            "node": "Save to Redis Cache",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "IF (Dual Write Needed - NoAudio)",
+            "node": "IF (Cacheable?)",
             "type": "main",
             "index": 0
           }
@@ -1577,12 +1676,7 @@
             "index": 0
           },
           {
-            "node": "Save Audio to Cache",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "IF (Dual Write Needed - Audio)",
+            "node": "IF (Cacheable? Audio)",
             "type": "main",
             "index": 0
           }
@@ -1611,7 +1705,7 @@
         ],
         [
           {
-            "node": "Respond (Text Only)",
+            "node": "Recover Answer After TTS Failure",
             "type": "main",
             "index": 0
           }
@@ -1867,6 +1961,56 @@
           }
         ]
       ]
+    },
+    "IF (Cacheable?)": {
+      "main": [
+        [
+          {
+            "node": "Save to Redis Cache",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (Dual Write Needed - NoAudio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "IF (Cacheable? Audio)": {
+      "main": [
+        [
+          {
+            "node": "Save Audio to Cache",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (Dual Write Needed - Audio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Recover Answer After TTS Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond (Text Only)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF (Cacheable?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1878,5 +2022,5 @@
     "templateCredsSetupCompleted": true
   },
   "id": "d8nftRI2zhutW98L",
-  "versionId": "6aec57f7-ded8-419b-a17a-8fd372d1ff0f"
+  "versionId": "290110b6-5f03-418e-8ed2-ffea7c3e29f8"
 }
