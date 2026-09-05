@@ -51,6 +51,12 @@ interface UseChatOpts {
    * persist it against the face it belongs to. Debouncing is the caller's job.
    */
   onMessagesChanged?: (messages: ChatMessage[]) => void;
+  /**
+   * Facts the workflow picked out of the turn that just completed, for the
+   * visitor's stored profile. Fires on the rare turn where someone actually
+   * says something about themselves.
+   */
+  onProfileDelta?: (delta: NonNullable<ChatReply["profileDelta"]>) => void;
 }
 
 /**
@@ -77,6 +83,7 @@ export function useChat({
   getVisitor,
   getSessionKey,
   onMessagesChanged,
+  onProfileDelta,
 }: UseChatOpts) {
   const [sessions, setSessions] = useState<Session[]>(() => {
     const draft = loadDraft();
@@ -91,8 +98,22 @@ export function useChat({
 
   const abortRef = useRef<AbortController | null>(null);
   // Latest opts captured for use inside dispatch closures.
-  const optsRef = useRef({ wantsAudio, onAudio, getVisitor, getSessionKey, onMessagesChanged });
-  optsRef.current = { wantsAudio, onAudio, getVisitor, getSessionKey, onMessagesChanged };
+  const optsRef = useRef({
+    wantsAudio,
+    onAudio,
+    getVisitor,
+    getSessionKey,
+    onMessagesChanged,
+    onProfileDelta,
+  });
+  optsRef.current = {
+    wantsAudio,
+    onAudio,
+    getVisitor,
+    getSessionKey,
+    onMessagesChanged,
+    onProfileDelta,
+  };
 
   // ---- Persistence ----
   // The draft slot only ever holds the conversation on screen (see
@@ -364,6 +385,12 @@ export function useChat({
             ? `Workflow stage: ${reply.stage ?? "unknown"}${reply.error ? ` — ${reply.error}` : ""}`
             : undefined,
         });
+
+        // Only on a turn that really worked: an error responder can carry a
+        // half-built body, and a profile is not the place to find out.
+        if (!assistantFailed && reply.profileDelta) {
+          optsRef.current.onProfileDelta?.(reply.profileDelta);
+        }
 
         // Clean up retriability + IndexedDB only on TRUE success.
         if (!assistantFailed) {

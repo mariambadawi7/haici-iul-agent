@@ -3,9 +3,9 @@ import {
   enrollFace,
   loadVisitor,
   saveVisitor,
-  type VisitorProfile,
   type VisitorRecord,
 } from "../lib/visitorApi";
+import type { ProfileDelta } from "../lib/api";
 import { isStranger, type ConfirmedIdentity } from "./useVision";
 import type { ChatMessage } from "../types";
 
@@ -259,7 +259,7 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
    * arrives at most once per turn, and losing one to a walk-away means losing
    * the one thing the visitor actually told the kiosk about themselves.
    */
-  const applyProfileDelta = useCallback(async (delta: Partial<VisitorProfile>) => {
+  const applyProfileDelta = useCallback(async (delta: ProfileDelta) => {
     const uid = uidRef.current;
     if (!uid || !delta) return;
     if (!delta.displayName && !delta.facts?.length) return;

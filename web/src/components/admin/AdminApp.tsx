@@ -7,6 +7,7 @@ import {
   LogOut,
   Palette,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import PasscodeGate from "./PasscodeGate";
 import KpiCards from "./KpiCards";
@@ -18,6 +19,7 @@ import VolumeChart from "./VolumeChart";
 import Breakdowns from "./Breakdowns";
 import QuestionLog from "./QuestionLog";
 import BrandingTab from "./BrandingTab";
+import VisitorsTab from "./VisitorsTab";
 import LexiconEditor from "./LexiconEditor";
 import { ErrorState } from "./ui";
 import { useTenant } from "../../lib/branding/context";
@@ -56,12 +58,12 @@ function readMockRole(): AdminRole {
   return role === "client" ? "client" : "operator";
 }
 
-type Tab = "analytics" | "lexicon" | "branding";
+type Tab = "analytics" | "lexicon" | "branding" | "visitors";
 
 /** Which tabs each role may see. The server enforces the same split — this
  *  only decides what gets drawn. */
 const TABS_BY_ROLE: Record<AdminRole, Tab[]> = {
-  operator: ["analytics", "lexicon", "branding"],
+  operator: ["analytics", "lexicon", "branding", "visitors"],
   client: ["analytics"],
 };
 
@@ -69,6 +71,7 @@ const TAB_META: Record<Tab, { label: string; icon: ReactNode }> = {
   analytics: { label: "Analytics", icon: <BarChart3 className="w-3.5 h-3.5" /> },
   lexicon: { label: "Lexicon", icon: <BookMarked className="w-3.5 h-3.5" /> },
   branding: { label: "Branding", icon: <Palette className="w-3.5 h-3.5" /> },
+  visitors: { label: "Visitors", icon: <Users className="w-3.5 h-3.5" /> },
 };
 
 export default function AdminApp() {
@@ -287,6 +290,8 @@ export default function AdminApp() {
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-5 md:space-y-6">
         {activeTab === "branding" ? (
           <BrandingTab passcode={passcode} />
+        ) : activeTab === "visitors" ? (
+          <VisitorsTab passcode={passcode} />
         ) : activeTab === "lexicon" ? (
           <LexiconEditor client={client} passcode={passcode!} />
         ) : overviewError ? (

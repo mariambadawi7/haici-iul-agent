@@ -25,6 +25,8 @@ export interface ChatReply {
   error?: string;
   /** Workflow node where the error happened, if known. */
   stage?: string;
+  /** Facts about the visitor the workflow picked out of this turn. */
+  profileDelta?: ProfileDelta;
 }
 
 function base64ToBlob(b64: string, mime: string): Blob {
@@ -51,6 +53,22 @@ function parseReply(data: any): ChatReply {
   if (data.question) reply.question = String(data.question);
   if (data.error) reply.error = String(data.error);
   if (data.stage) reply.stage = String(data.stage);
+  // Shape-checked rather than trusted: this is merged into a stored profile,
+  // and a malformed delta from a mis-edited workflow node must be dropped
+  // rather than written through.
+  if (data.profileDelta && typeof data.profileDelta === "object") {
+    const raw = data.profileDelta;
+    const delta: ProfileDelta = {};
+    if (typeof raw.displayName === "string" && raw.displayName.trim()) {
+      delta.displayName = raw.displayName.trim();
+    }
+    if (Array.isArray(raw.facts)) {
+      delta.facts = raw.facts
+        .filter((f: any) => f && typeof f.key === "string" && typeof f.value === "string")
+        .map((f: any) => ({ key: f.key, value: f.value }));
+    }
+    if (delta.displayName || delta.facts?.length) reply.profileDelta = delta;
+  }
   return reply;
 }
 
@@ -147,6 +165,35 @@ export interface Visitor {
   name: string | null;
   /** Smoothed expression, or null when the camera is not watching. */
   emotion: string | null;
+  /**
+   * The face-bound identifier, when the conversation is bound to one.
+   *
+   * Distinct from `name`, and the distinction matters. `name` is for the
+   * agent to say out loud; `uid` is what the workflow keys the answer cache
+   * on. Keying on a name would be wrong twice over: an auto-enrolled visitor
+   * has a uid but no name at all, and two people can perfectly well share a
+   * name while never sharing a cache entry.
+   */
+  uid?: string | null;
+  /**
+   * What the kiosk has been told about this person. Sent so the agent can
+   * answer "what do you know about me" from something durable rather than
+   * from whatever happens to be left in its buffer memory.
+   */
+  profile?: {
+    displayName: string | null;
+    facts: Array<{ key: string; value: string }>;
+  } | null;
+}
+
+/**
+ * Facts the workflow extracted from this turn, to merge into the visitor's
+ * stored profile. Absent on the overwhelming majority of turns — a question
+ * about opening hours says nothing about who is asking it.
+ */
+export interface ProfileDelta {
+  displayName?: string | null;
+  facts?: Array<{ key: string; value: string }>;
 }
 
 /**

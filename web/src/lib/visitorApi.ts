@@ -106,7 +106,15 @@ export async function loadVisitor(uid: string): Promise<VisitorRecord | null> {
 
 export interface SaveVisitorInput {
   messages?: ChatMessage[];
-  profile?: Partial<VisitorProfile>;
+  /**
+   * A partial profile to merge. Facts carry no `updatedAt` on the way in — the
+   * sidecar stamps its own, so a client clock (or a workflow's) can never
+   * decide the ordering of what the store believes.
+   */
+  profile?: {
+    displayName?: string | null;
+    facts?: Array<{ key: string; value: string }>;
+  };
   /** Set once per conversation, never per turn — see writeVisitor in ws-server.ts. */
   bumpVisit?: boolean;
 }

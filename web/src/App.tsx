@@ -15,7 +15,7 @@ import { useVisitor } from "./hooks/useVisitor";
 import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
-import { config, twoStage } from "./lib/api";
+import { config, twoStage, type Visitor } from "./lib/api";
 import { useTenant } from "./lib/branding/context";
 import type { Emotion, FaceState } from "./types";
 
@@ -50,7 +50,7 @@ export default function App() {
 
   // Written just below, once `vision` has a reading; read only when a turn is
   // sent, by which point it holds whatever the camera currently believes.
-  const visitorRef = useRef<{ name: string | null; emotion: string | null } | null>(null);
+  const visitorRef = useRef<Visitor | null>(null);
 
   const chat = useChat({
     wantsAudio: features.voice && tts.enabled,
@@ -61,6 +61,7 @@ export default function App() {
     // the transcript at it.
     getSessionKey: visitor.sessionKey,
     onMessagesChanged: visitor.saveMessages,
+    onProfileDelta: visitor.applyProfileDelta,
     onAudio: (blob) => {
       tts.playBlob(blob).catch((e) =>
         console.error("[app] TTS playback failed", e),
@@ -241,8 +242,31 @@ export default function App() {
 
   // Every turn carries who the camera thinks it is talking to. Null fields are
   // dropped in sendChat, so "no visitor key" means the kiosk cannot see anyone.
-  visitorRef.current = vision.signal.live
-    ? { name: vision.signal.identity, emotion: vision.emotion }
+  // Sent whenever the camera can see someone OR the conversation is bound to
+  // a person. The second half matters: the binding is locked for the whole
+  // conversation, so a visitor who leans out of frame — or a camera that drops
+  // a couple of seconds of inference — must not silently stop being
+  // themselves halfway through, which would move the rest of their turns into
+  // a different memory thread and a different cache namespace.
+  visitorRef.current =
+    vision.signal.live || visitor.uid
+    ? {
+        // The name is for the agent to SAY. Prefer what the person told the
+        // kiosk they are called over the gallery label, and never fall back to
+        // an auto-enrolled uid — "hello v7f3a9c1b2d" is worse than "hello".
+        name: visitor.displayName ?? vision.signal.identity,
+        emotion: vision.emotion,
+        // The uid is for the workflow to KEY on. Separate field, separate job.
+        uid: visitor.uid,
+        profile: visitor.profile
+          ? {
+              displayName: visitor.profile.displayName,
+              // Timestamps are bookkeeping for the store, not context for the
+              // agent, and they would only dilute the prompt.
+              facts: visitor.profile.facts.map((f) => ({ key: f.key, value: f.value })),
+            }
+          : null,
+      }
     : null;
 
   /**
