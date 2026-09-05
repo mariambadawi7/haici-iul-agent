@@ -142,6 +142,11 @@ export function usePresence({
    */
   const commitWake = useCallback(
     (source: WakeSource) => {
+      // Belt-and-braces: a conversation already in progress should never be
+      // re-wiped by a second wake. The cooldown-refresh effect below is the
+      // primary fix for the stale-cooldown bug, but this guard holds even if
+      // some future caller invokes commitWake directly while `awake` is true.
+      if (awakeRef.current) return;
       clearVeto();
       lastWakeRef.current = Date.now();
       awakeRef.current = true;
@@ -202,6 +207,16 @@ export function usePresence({
     if (near) commitWake("camera");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vision.live, vision.peopleCount, vision.nearestDistanceM, nearMetres, commitWake]);
+
+  // The cooldown exists to stop a person who is standing still from being
+  // greeted over and over. Stamping it only at wake time measures "time since
+  // the last wake", which elapses while the visitor is still mid-conversation —
+  // so keep the stamp fresh for as long as anyone is in frame.
+  useEffect(() => {
+    if (vision.live && vision.peopleCount > 0) {
+      lastWakeRef.current = Date.now();
+    }
+  }, [vision.live, vision.peopleCount, vision.nearestDistanceM]);
 
   // Departure. Only the camera can observe this; the sensor cannot tell an
   // empty lobby from a person standing still.
