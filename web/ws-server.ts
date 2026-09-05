@@ -13,6 +13,21 @@
 
 import { mkdir, rename } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+  addFaceSample,
+  clampMessages,
+  countFaceSamples,
+  emptyRecord,
+  FACES_DIR,
+  forgetVisitor,
+  isValidUid,
+  listVisitors,
+  newUid,
+  readRecord,
+  sanitiseProfile,
+  updateRecord,
+  VISITOR_DIR,
+} from "./visitor-store";
 
 type ClientType = "hardware" | "browser";
 
@@ -282,6 +297,181 @@ async function readAsset(name: string): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
+// Face-bound visitor records
+// ---------------------------------------------------------------------------
+
+/** A face crop is a small JPEG. Anything larger is not one. */
+const MAX_FACE_BYTES = 2 * 1024 * 1024;
+/** A transcript plus a profile. Generous, but not unbounded. */
+const MAX_RECORD_BYTES = 1024 * 1024;
+
+/**
+ * Visitor routes are served ONLY to the local Vite proxy.
+ *
+ * This is the one difference from the branding API above, and it matters:
+ * branding is a logo and a colour, while a visitor record is a named person's
+ * transcript and whatever they volunteered about themselves. Port 3001 is
+ * published on every interface — it has to be, because the ESP32 dials it
+ * directly and can speak neither TLS nor the page origin (see F-08 above) — so
+ * an ungated GET here would hand every transcript on the kiosk to anyone on
+ * the same Wi-Fi.
+ *
+ * The browser never needs that published port: it reaches this process through
+ * the Vite proxy in the same container (`/api` -> 127.0.0.1:3001, see
+ * web/vite.config.ts), so a legitimate visitor request always arrives from
+ * loopback and a LAN request never does. That makes the check free of new
+ * configuration, unlike a shared secret — and a secret shipped to a browser
+ * would not be secret anyway.
+ *
+ * The Origin gate used for websockets is NOT sufficient here: a curl from the
+ * LAN simply sends no Origin, which that check deliberately permits so the
+ * ESP32 can connect.
+ */
+function requireLoopback(
+  req: Request,
+  server: import("bun").Server,
+): Response | null {
+  const address = server.requestIP(req)?.address ?? "";
+  const local =
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1" ||
+    address.startsWith("127.");
+  if (local) return null;
+  console.warn(`[visitors] refused a non-local request from ${address || "an unknown address"}`);
+  return json({ error: "Visitor records are only served to the local kiosk." }, 403);
+}
+
+/**
+ * Enroll a face, or add another reference photo to one already enrolled.
+ *
+ * Deliberately NOT operator-gated: the kiosk itself calls this, unattended,
+ * the moment it sees a face it does not know. The loopback check above is what
+ * keeps it off the network. Deleting a face IS operator-gated, because that is
+ * a staff action taken on someone's behalf.
+ */
+async function enrollVisitor(req: Request): Promise<Response> {
+  const form = await req.formData().catch(() => null);
+  const file = form?.get("file");
+  if (!(file instanceof File)) {
+    return json({ error: "Expected a multipart body with a `file` field." }, 400);
+  }
+  if (file.size > MAX_FACE_BYTES) {
+    return json({ error: "Face crop is larger than 2 MB." }, 413);
+  }
+
+  const supplied = form?.get("uid");
+  let uid: string;
+  let created = false;
+  if (typeof supplied === "string" && supplied) {
+    // Adding a sample to a visitor we already know. The uid must be one the
+    // camera reported back, so it is validated exactly like any other.
+    if (!isValidUid(supplied)) return json({ error: "Invalid uid." }, 400);
+    uid = supplied;
+  } else {
+    uid = newUid();
+    created = true;
+  }
+
+  let sample: number | null;
+  try {
+    sample = await addFaceSample(uid, file);
+  } catch (err) {
+    console.error("[visitors] could not write the face sample", err);
+    return json({ error: "Could not store the face." }, 500);
+  }
+
+  if (sample === null) {
+    // Already at MAX_SAMPLES. Not an error: the caller adds samples
+    // opportunistically and simply stops being useful past the cap.
+    return json({ uid, sample: null, samples: await countFaceSamples(uid), created: false });
+  }
+
+  if (created) {
+    await updateRecord(uid, (record) => ({ ...record, enrolled: true }));
+  }
+
+  console.log(
+    `[visitors] ${created ? "enrolled" : "added a sample for"} ${uid} (sample ${sample})`,
+  );
+  return json({ uid, sample, samples: await countFaceSamples(uid), created });
+}
+
+/**
+ * Read a visitor. A uid with no record yet is a 200 with an empty one and
+ * `exists: false`, not a 404 — a staff-enrolled face (a photo dropped into the
+ * gallery by hand) is a perfectly valid identity that has simply never spoken
+ * to the kiosk before, and the caller treats it identically either way.
+ */
+async function readVisitor(uid: string): Promise<Response> {
+  if (!isValidUid(uid)) return json({ error: "Invalid uid." }, 400);
+  const record = await readRecord(uid);
+  return json({ exists: record !== null, record: record ?? emptyRecord(uid) });
+}
+
+async function writeVisitor(req: Request, uid: string): Promise<Response> {
+  if (!isValidUid(uid)) return json({ error: "Invalid uid." }, 400);
+
+  const raw = await req.text();
+  if (raw.length > MAX_RECORD_BYTES) {
+    return json({ error: "Visitor record too large." }, 413);
+  }
+
+  let body: any;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return json({ error: "Body is not valid JSON." }, 400);
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return json({ error: "Body must be a JSON object." }, 400);
+  }
+
+  try {
+    const saved = await updateRecord(uid, (record) => ({
+      ...record,
+      lastSeen: Date.now(),
+      // The client counts conversations, not turns: it sets this only on the
+      // first save of a wake. Counting here instead would tick once per
+      // message and make "visits" meaningless.
+      visits: body.bumpVisit ? record.visits + 1 : record.visits,
+      profile: sanitiseProfile(body.profile, record.profile),
+      messages: clampMessages(body.messages, record.messages),
+    }));
+    return json({ ok: true, record: saved });
+  } catch (err) {
+    console.error(`[visitors] write failed for ${uid}`, err);
+    return json({ error: "Could not persist the visitor record." }, 500);
+  }
+}
+
+/** Everything the kiosk has stored about everyone. Operator only. */
+async function listVisitorSummaries(req: Request): Promise<Response> {
+  const denied = requireOperator(req);
+  if (denied) return denied;
+  return json({ visitors: await listVisitors() });
+}
+
+/**
+ * Forget a visitor: transcript, profile and face. Operator only, and the one
+ * route that must keep working — it is how a person who asks to be removed
+ * actually gets removed.
+ */
+async function deleteVisitor(req: Request, uid: string): Promise<Response> {
+  const denied = requireOperator(req);
+  if (denied) return denied;
+  if (!isValidUid(uid)) return json({ error: "Invalid uid." }, 400);
+  try {
+    await forgetVisitor(uid);
+  } catch (err) {
+    console.error(`[visitors] delete failed for ${uid}`, err);
+    return json({ error: "Could not delete the visitor." }, 500);
+  }
+  console.log(`[visitors] forgot ${uid} (record and face)`);
+  return json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
 
 const server = Bun.serve<WsData>({
   port: 3001,
@@ -299,6 +489,30 @@ const server = Bun.serve<WsData>({
       const name = decodeURIComponent(url.pathname.slice("/api/branding/asset/".length));
       if (req.method === "GET") return readAsset(name);
       if (req.method === "POST") return uploadAsset(req, name);
+      return json({ error: "Method not allowed." }, 405);
+    }
+
+    if (url.pathname === "/api/visitors" || url.pathname.startsWith("/api/visitors/")) {
+      const denied = requireLoopback(req, server);
+      if (denied) return denied;
+
+      if (url.pathname === "/api/visitors") {
+        if (req.method === "GET") return listVisitorSummaries(req);
+        return json({ error: "Method not allowed." }, 405);
+      }
+
+      const rest = decodeURIComponent(url.pathname.slice("/api/visitors/".length));
+
+      // Checked before the uid routes below, or an enrollment would be read as
+      // a request for the visitor whose uid is literally "enroll".
+      if (rest === "enroll") {
+        if (req.method === "POST") return enrollVisitor(req);
+        return json({ error: "Method not allowed." }, 405);
+      }
+
+      if (req.method === "GET") return readVisitor(rest);
+      if (req.method === "PUT") return writeVisitor(req, rest);
+      if (req.method === "DELETE") return deleteVisitor(req, rest);
       return json({ error: "Method not allowed." }, 405);
     }
 
@@ -358,6 +572,8 @@ if (!HARDWARE_TOKEN) {
 }
 console.log(`[branding] config file: ${BRANDING_FILE}`);
 console.log(`[branding] asset dir:   ${ASSET_DIR}`);
+console.log(`[visitors] record dir:  ${VISITOR_DIR}`);
+console.log(`[visitors] face gallery: ${FACES_DIR}`);
 if (!OPERATOR_PASSCODE) {
   console.warn(
     "[branding] OPERATOR_PASSCODE is not set — branding writes are DISABLED (503). " +

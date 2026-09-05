@@ -134,6 +134,22 @@ services:
       # Tenant branding lives outside the source tree so a client's logos and
       # colours survive image rebuilds and never get committed.
       - ./branding:/app/branding
+      # Face-bound conversations. Per-visitor transcripts and profiles, keyed
+      # by the vision backend's gallery label. Runtime state, not source —
+      # gitignored, and it contains personal data, so it never gets committed.
+      - ./visitors:/app/visitors
+      # The vision backend's reference gallery, READ-WRITE — the same host
+      # directory the OpenCam project mounts read-only at /faces. Enrolling a
+      # visitor means adding a photo to that gallery, and the backend has no
+      # upload endpoint (only GET /api/faces and POST /api/faces/reload), so
+      # writing the file is the only way in. It rescans on a five-second timer,
+      # so a new face is live without calling back to it.
+      #
+      # This is the one place the two compose projects touch the same
+      # filesystem. The default assumes they are siblings on disk (the layout
+      # on the kiosk machine: ~/Desktop/haici-agent and ~/Desktop/opencam); set
+      # OPENCAM_FACES_DIR in .env for any other arrangement.
+      - ${OPENCAM_FACES_DIR:-../opencam/faces}:/app/faces
     depends_on:
       - n8n
     networks:

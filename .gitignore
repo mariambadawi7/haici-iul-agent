@@ -28,3 +28,7 @@ logs.csv
 
 # Live n8n workflow snapshots taken before edits. Runtime state, not history.
 .workflow-backups/
+
+# Face-bound conversation records live in visitors/ and are ignored by that
+# directory's own .gitignore, which is tracked so the bind-mount target exists
+# on a fresh clone. Not ignored from here, or that file would go too.
