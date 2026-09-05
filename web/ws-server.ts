@@ -11,7 +11,7 @@
 // not handshake reliably under Bun and the ESP32 (Arduino WebSocketsClient)
 // drops immediately against it. Bun.serve is solid with both the ESP and browsers.
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 
 type ClientType = "hardware" | "browser";
@@ -61,6 +61,44 @@ function requireOperator(req: Request): Response | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// F-08: WebSocket relay authentication / origin gating
+// ---------------------------------------------------------------------------
+//
+// WebSockets are exempt from the same-origin policy, so without an Origin
+// check any page in any browser on the network could open a socket here and
+// impersonate the hardware (broadcast forged presence/session events to every
+// kiosk browser) or eavesdrop on genuine hardware traffic. This relay is
+// reached two different ways — see the file header and Hardware/REPORT.md:
+// the kiosk browser goes through the Vite proxy on its own HTTPS origin
+// (web/vite.config.ts:/hw-ws), while the ESP32 firmware
+// (Hardware/src/main.cpp, DEFAULT_WS_HOST/DEFAULT_WS_PORT) dials this port
+// directly over the LAN, because it can neither speak TLS nor share the
+// page's origin. That means the port cannot be restricted to loopback the
+// way the other sidecars in docker-compose.yml are — doing so would sever
+// every hardware kiosk from its relay — so instead: browsers are gated by
+// Origin, and the hardware role (which is the privileged side: it can
+// broadcast to every browser) must prove itself with a shared secret.
+
+/** Browsers connecting to the relay must present one of these Origins. */
+const ALLOWED_WS_ORIGINS = new Set(
+  (process.env.WS_ALLOWED_ORIGINS ?? "https://localhost:5173")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
+/**
+ * Shared secret the `hardware` role must present as `?token=`. Chosen over a
+ * per-device credential or mTLS because the caller is a single ESP32 whose
+ * WS path is already a free-form NVS field set through its own AP config
+ * portal (see Hardware/REPORT.md "First-time configuration") — appending
+ * `&token=<value>` there needs no firmware rebuild. Fails CLOSED like
+ * OPERATOR_PASSCODE above: unset means hardware connections are refused,
+ * never waved through.
+ */
+const HARDWARE_TOKEN = process.env.HARDWARE_TOKEN ?? "";
 
 /** Refuse absurd payloads outright rather than filling the disk. */
 const MAX_CONFIG_BYTES = 256 * 1024;
@@ -116,6 +154,36 @@ async function readBranding(): Promise<Response> {
   }
 }
 
+// F-14: serialises concurrent PUTs. Two operators pressing Save at the same
+// moment would otherwise both truncate branding.json and interleave their
+// writes (see persistBranding below for why the truncate itself is the
+// bigger problem). Chained rather than a lock object because Promise
+// chaining already gives FIFO ordering with no extra bookkeeping.
+let brandingWriteChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Write branding.json by writing a sibling temp file and renaming it over
+ * the target, rather than writing the target directly.
+ *
+ * `Bun.write` truncates the destination and then writes into it, so a
+ * container restart, a full disk, or the host powering off mid-write leaves
+ * `branding.json` as truncated, unparseable JSON — and readBranding() then
+ * 500s on every subsequent GET forever, with no self-repair (see F-14 in
+ * docs/CODE-REVIEW-FINDINGS.md for the full failure chain). `rename` within
+ * one filesystem is atomic on both Linux and Windows: a reader always sees
+ * either the whole old file or the whole new one, never a partial write.
+ *
+ * The temp file MUST live in the same directory as BRANDING_FILE (the
+ * `/app/branding` bind mount), not in the container's own /tmp — a rename
+ * across filesystems fails with EXDEV instead of moving the file.
+ */
+async function persistBranding(parsed: unknown): Promise<void> {
+  await mkdir(dirname(BRANDING_FILE), { recursive: true });
+  const tmp = `${BRANDING_FILE}.tmp-${process.pid}-${Date.now()}`;
+  await Bun.write(tmp, JSON.stringify(parsed, null, 2));
+  await rename(tmp, BRANDING_FILE);
+}
+
 async function writeBranding(req: Request): Promise<Response> {
   const denied = requireOperator(req);
   if (denied) return denied;
@@ -136,8 +204,11 @@ async function writeBranding(req: Request): Promise<Response> {
   }
 
   try {
-    await mkdir(dirname(BRANDING_FILE), { recursive: true });
-    await Bun.write(BRANDING_FILE, JSON.stringify(parsed, null, 2));
+    const job = brandingWriteChain.then(() => persistBranding(parsed));
+    // Keep the chain alive even if this write fails, so one bad write does
+    // not wedge every save after it.
+    brandingWriteChain = job.catch(() => undefined);
+    await job;
   } catch (err) {
     console.error("[branding] write failed", err);
     return json({ error: "Could not persist the config to disk." }, 500);
@@ -231,7 +302,28 @@ const server = Bun.serve<WsData>({
       return json({ error: "Method not allowed." }, 405);
     }
 
+    // A non-browser client (the ESP32) sends no Origin header at all; a
+    // browser always does. Reject only origins that are present and not
+    // allowed, so hardware upgrades (checked next) are unaffected.
+    const origin = req.headers.get("origin");
+    if (origin !== null && !ALLOWED_WS_ORIGINS.has(origin)) {
+      console.warn(`[ws] rejected upgrade from origin ${origin}`);
+      return new Response("Forbidden", { status: 403 });
+    }
+
     const clientType = (url.searchParams.get("client") ?? "browser") as ClientType;
+
+    if (clientType === "hardware") {
+      if (!HARDWARE_TOKEN) {
+        console.error("[ws] HARDWARE_TOKEN is not set; refusing hardware connections");
+        return new Response("Relay not configured", { status: 503 });
+      }
+      if (url.searchParams.get("token") !== HARDWARE_TOKEN) {
+        console.warn("[ws] rejected hardware upgrade with a bad or missing token");
+        return new Response("Forbidden", { status: 403 });
+      }
+    }
+
     const upgraded = server.upgrade(req, { data: { type: clientType } });
     if (upgraded) return undefined;
     return new Response("WebSocket relay — upgrade required", { status: 426 });
@@ -255,6 +347,15 @@ const server = Bun.serve<WsData>({
 });
 
 console.log(`[ws] relay listening on :${server.port}`);
+console.log(`[ws] allowed browser origins: ${[...ALLOWED_WS_ORIGINS].join(", ") || "(none)"}`);
+if (!HARDWARE_TOKEN) {
+  console.warn(
+    "[ws] HARDWARE_TOKEN is not set — hardware connections are DISABLED (503). " +
+      "Set it in docker-compose.yml/.env and in the ESP32's WS path (?token=...) to re-enable.",
+  );
+} else {
+  console.log("[ws] hardware connections require a token");
+}
 console.log(`[branding] config file: ${BRANDING_FILE}`);
 console.log(`[branding] asset dir:   ${ASSET_DIR}`);
 if (!OPERATOR_PASSCODE) {

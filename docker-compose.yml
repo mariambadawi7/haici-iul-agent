@@ -110,6 +110,24 @@ services:
       # same secret whose sha256 is stored as admin_settings.operator_passcode_sha256,
       # because the operator console forwards the passcode it authenticated with.
       - OPERATOR_PASSCODE=${ADMIN_DASHBOARD_PASSCODE:-}
+      # F-08: shared secret the `hardware` (ESP32) role must present as
+      # ?token= on the WebSocket relay (port 3001). That port stays published
+      # on all interfaces below because the ESP32 dials it directly over the
+      # LAN and cannot go through the Vite proxy's HTTPS origin — so this
+      # token, not loopback binding, is what keeps a stranger on the same
+      # Wi-Fi from impersonating the hardware. Fails closed: unset means every
+      # hardware connection is refused (503), never silently accepted. Set
+      # the same value in the ESP32's WS path via its AP config portal, e.g.
+      # "/ws?client=hardware&token=<value>" (Hardware/REPORT.md).
+      - HARDWARE_TOKEN=${HARDWARE_TOKEN:-}
+      # F-08: origins allowed to open a browser WebSocket to the relay above,
+      # comma-separated. Deliberately NOT given a `:-` empty-string default
+      # here the way the other variables above are: ws-server.ts falls back
+      # to "https://localhost:5173" only when the variable is truly unset
+      # (`??`), and an empty string from `VAR=${VAR:-}` would satisfy that
+      # check and lock out every browser instead. Uncomment only to override
+      # the default for a non-default kiosk host/port:
+      # - WS_ALLOWED_ORIGINS=https://localhost:5173,https://192.168.1.50:5173
     volumes:
       - ./web:/app
       - /app/node_modules
