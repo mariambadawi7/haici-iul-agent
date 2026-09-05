@@ -13,6 +13,11 @@ interface Props {
   /** GLB to load. Supplied from the tenant config so each client can ship
    *  their own character; falls back to the bundled head. */
   modelUrl?: string;
+  /** Fires when the GLB fails to load (bad URL, 404, malformed file) so the
+   *  caller can fall back to another avatar renderer. Avatar3D itself also
+   *  renders an in-panel message so a missing callback never leaves a blank,
+   *  unexplained canvas. */
+  onLoadError?: (err: Error) => void;
 }
 
 // Any GLB carrying ARKit/Oculus blendshapes works (a Ready Player Me URL, or
@@ -90,16 +95,64 @@ interface MorphEntry {
   index: number;
 }
 
-function Head({ state, amplitude, emotion, modelUrl }: Required<Props>) {
+/** Three.js does not free GPU memory on garbage collection — geometries,
+ *  materials and textures each hold a buffer that must be released explicitly,
+ *  or the discarded model's VRAM stays resident for the life of the WebGL
+ *  context. Safe to call on a group that is about to be replaced OR that is
+ *  still attached; the caller is responsible for not disposing anything still
+ *  shared with a model that stays on screen (this component never shares
+ *  geometries/materials across loads, since each GLTFLoader.load gets its own
+ *  freshly parsed scene graph). */
+function disposeObject(obj: THREE.Object3D) {
+  obj.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (mesh.geometry) mesh.geometry.dispose();
+    const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(mat)) mat.forEach(disposeMaterial);
+    else if (mat) disposeMaterial(mat);
+  });
+}
+
+function disposeMaterial(mat: THREE.Material) {
+  for (const value of Object.values(mat)) {
+    if (value && typeof value === "object" && "isTexture" in value) {
+      (value as THREE.Texture).dispose();
+    }
+  }
+  mat.dispose();
+}
+
+function Head({
+  state,
+  amplitude,
+  emotion,
+  modelUrl,
+  onError,
+}: Required<Pick<Props, "state" | "amplitude" | "emotion">> & {
+  modelUrl: string;
+  onError: (err: Error) => void;
+}) {
   const gl = useThree((s) => s.gl);
   const groupRef = useRef<THREE.Group>(null);
   /** Maps logical name → array of {mesh, index} so we drive ALL meshes. */
   const morphMapRef = useRef<Record<string, MorphEntry[]>>({});
+  /** The currently-attached model holder, so a re-load (tenant swaps their
+   *  avatar) or unmount can remove and dispose the OLD one instead of
+   *  stacking a second head in the same group. */
+  const holderRef = useRef<THREE.Group | null>(null);
   const [ready, setReady] = useState(false);
   const ptr = usePointer();
 
   // Blink: clean phase machine so eyes actually re-open.
   const blink = useRef({ value: 0, timer: 2, phase: "open" as "open" | "closing" | "opening" });
+
+  // `onError` is recreated by the parent on every render (amplitude updates
+  // every frame while speaking), so it cannot sit in the load effect's
+  // dependency array below without reloading the GLB dozens of times a
+  // second. Stash it in a ref and read the ref inside the effect instead —
+  // the effect still only re-runs when gl/modelUrl actually change.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     const ktx2 = new KTX2Loader().setTranscoderPath("/basis/").detectSupport(gl);
@@ -157,14 +210,41 @@ function Head({ state, amplitude, emotion, modelUrl }: Required<Props>) {
         holder.scale.setScalar(scale);
         // Shift slightly up so face is centered in viewport
         holder.position.set(0, 0.05, 0);
+
+        // Swap out any previously-attached model instead of stacking a second
+        // one in the same group. Without this, a tenant re-saving their GLB
+        // URL in the Branding tab (which re-renders <Avatar3D> in place rather
+        // than remounting it) superimposes two heads and leaks the old one's
+        // geometries/materials/textures for the life of the WebGL context.
+        if (holderRef.current) {
+          groupRef.current?.remove(holderRef.current);
+          disposeObject(holderRef.current);
+        }
+        holderRef.current = holder;
         groupRef.current?.add(holder);
         setReady(true);
       },
       undefined,
-      (err) => console.error("[Avatar3D] load failed", err),
+      (err) => {
+        console.error("[Avatar3D] load failed", err);
+        // A failed load must be visible to the caller, otherwise the tenant
+        // gets a blank panel with no indication anything is wrong and no way
+        // to fall back to another renderer.
+        if (alive) onErrorRef.current(err instanceof Error ? err : new Error(String(err)));
+      },
     );
-    return () => { alive = false; };
-    // Re-loads when the tenant swaps their avatar model.
+    return () => {
+      alive = false;
+      if (holderRef.current) {
+        groupRef.current?.remove(holderRef.current);
+        disposeObject(holderRef.current);
+        holderRef.current = null;
+      }
+      morphMapRef.current = {};
+      setReady(false);
+    };
+    // Re-loads when the tenant swaps their avatar model. `onError` is
+    // deliberately excluded — see onErrorRef above.
   }, [gl, modelUrl]);
 
   useFrame((_, dtRaw) => {
@@ -183,12 +263,19 @@ function Head({ state, amplitude, emotion, modelUrl }: Required<Props>) {
     }
 
     // Helper: set a logical morph value across ALL meshes that have it.
+    // Exponential smoothing normalised to a 60fps baseline, so expressions
+    // converge at the same wall-clock rate on a 120Hz tablet and a throttled
+    // tab. `lerp` is the fraction of the gap closed per frame AT 60fps; `k` is
+    // the equivalent fraction for however long this frame's `dt` actually was.
+    // The blink phase machine above already uses dt this way — without this,
+    // blink timing and expression timing would drift apart across displays.
     const set = (key: string, v: number, lerp = 0.35) => {
       const entries = map[key];
       if (!entries) return;
+      const k = 1 - Math.pow(1 - lerp, dt * 60);
       for (const { mesh, index } of entries) {
         const infl = mesh.morphTargetInfluences!;
-        infl[index] += (v - infl[index]) * lerp;
+        infl[index] += (v - infl[index]) * k;
       }
     };
 
@@ -268,8 +355,36 @@ export default function Avatar3D({
   amplitude = 0,
   emotion = "neutral",
   modelUrl,
+  onLoadError,
 }: Props) {
   const url = modelUrl || FALLBACK_MODEL_URL;
+  const [loadError, setLoadError] = useState<Error | null>(null);
+
+  // A model that failed once may load fine after the tenant fixes the URL —
+  // clear the error whenever they hand us a new one so this component can
+  // recover without needing a full remount.
+  useEffect(() => {
+    setLoadError(null);
+  }, [url]);
+
+  const handleError = (err: Error) => {
+    setLoadError(err);
+    onLoadError?.(err);
+  };
+
+  if (loadError) {
+    // Degrade to a themed message instead of the permanently blank,
+    // unexplained panel a silent load failure used to leave behind. The
+    // caller (via onLoadError) is the better place to fall back to the
+    // mascot/image/none renderer entirely; this is the floor for callers
+    // that don't wire that up.
+    return (
+      <div className="relative w-full h-full min-h-[150px] flex items-center justify-center rounded-2xl border border-neutral-200 bg-surface p-4 text-center text-sm text-neutral-500 select-none">
+        Avatar could not be loaded.
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-full min-h-[150px] select-none">
       <Canvas
@@ -282,7 +397,7 @@ export default function Avatar3D({
         <directionalLight position={[2.5, 2.5, 3]} intensity={1.35} color="#fff1de" />
         <directionalLight position={[-3, 0.5, 1.5]} intensity={0.3} color="#e8ddd2" />
         <directionalLight position={[-1, 1.5, -3]} intensity={0.6} color="#ffcf99" />
-        <Head state={state} amplitude={amplitude} emotion={emotion} modelUrl={url} />
+        <Head state={state} amplitude={amplitude} emotion={emotion} modelUrl={url} onError={handleError} />
       </Canvas>
     </div>
   );
