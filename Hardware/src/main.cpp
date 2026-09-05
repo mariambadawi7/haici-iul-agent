@@ -394,6 +394,11 @@ static void startAPMode() {
 
 // ── Ultrasonic presence detection ─────────────────────────────────────────────
 static unsigned long lastUltrasonicMs = 0;
+// millis() also starts at 0, so a 0 sentinel would read as "someone was here at
+// boot" and suppress every detection for the first idleTimeoutMs of uptime.
+// A dedicated flag distinguishes "nobody has ever been seen" from "nobody has
+// been seen for a while".
+static bool          seenAnyoneYet    = false;
 static unsigned long lastPresenceMs   = 0;
 static bool          wasPresent       = false;
 
@@ -407,13 +412,14 @@ static void checkPresence() {
   if (present) {
     if (!wasPresent) {
       unsigned long idleMs = millis() - lastPresenceMs;
-      if (idleMs >= cfg.idleTimeoutMs) {
+      if (!seenAnyoneYet || idleMs >= cfg.idleTimeoutMs) {
         Serial.printf("[ULTRA] Person detected after %.1f min idle -> presence_detected\n",
-                      idleMs / 60000.0f);
+                      seenAnyoneYet ? idleMs / 60000.0f : 0.0f);
         wsSendRaw("{\"type\":\"presence_detected\"}");
       }
       wasPresent = true;
     }
+    seenAnyoneYet  = true;
     lastPresenceMs = millis();
   } else {
     wasPresent = false;
