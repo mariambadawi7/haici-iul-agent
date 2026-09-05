@@ -77,8 +77,6 @@ export interface BrandFeatures {
   landing: boolean;
   /** The #/admin analytics dashboard. */
   admin: boolean;
-  /** Conversation history rail. */
-  sidebar: boolean;
   /**
    * Camera vision (OpenCam): presence detection, face recognition, emotion.
    * Off by default — it needs the vision backend running, and it is a camera

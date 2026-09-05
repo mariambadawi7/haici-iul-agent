@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OpenCam } from "@opencam/client";
+import type { Box, FrameSize } from "@opencam/client";
+import { cropFace } from "../lib/faceCrop";
 import type { VisionSignal } from "./usePresence";
 import type { Emotion } from "../types";
 
@@ -103,6 +105,92 @@ function majority(window: Sample[], current: Emotion | null): Emotion | null {
   return EMOTION_MAP[best.toLowerCase()] ?? "neutral";
 }
 
+/**
+ * Identity confidence.
+ *
+ * The backend calls a face matched at cosine >= 0.363 (`match_threshold` in
+ * face_matcher.py). That is the right threshold for its job — labelling a box
+ * on a dashboard, where a wrong name is a cosmetic error you can see and
+ * ignore. It is the wrong threshold for ours: this identity keys a stored
+ * transcript, so a false match does not mislabel a box, it opens a stranger's
+ * conversation and shows it to the wrong person.
+ *
+ * The failure modes are not symmetric, so the gate is not centred:
+ *
+ *   too strict -> a returning visitor gets a blank chat. Mildly annoying, and
+ *                 self-correcting, because they are about to be re-enrolled or
+ *                 recognised on the next frame.
+ *   too loose  -> one person reads another person's conversation. Not
+ *                 recoverable, and not even noticed by the kiosk.
+ *
+ * So: a higher similarity than the backend requires, AND the same name on
+ * consecutive frames. The second condition is what a single unlucky frame
+ * cannot satisfy, and at 15-25 fps it costs a fraction of a second.
+ */
+const IDENTITY_MIN_SIMILARITY = 0.5;
+const IDENTITY_MIN_FRAMES = 5;
+
+/**
+ * Frames of a face with no identity before we accept that it is genuinely a
+ * stranger rather than a match that has not resolved yet. Longer than the
+ * confirmation above, deliberately: enrolling is a write to the gallery, and
+ * enrolling someone who was about to be recognised creates a duplicate
+ * identity that splits their history in two forever.
+ */
+const STRANGER_MIN_FRAMES = 25;
+
+/**
+ * A `<video>` that exists only so a still can be grabbed from the camera.
+ *
+ * The kiosk never shows the camera feed, but `canvas.drawImage` needs an
+ * element with decoded frames in it, and the SDK hands back a MediaStream
+ * rather than anything drawable.
+ *
+ * It is attached to the document and sized 1x1 rather than hidden with
+ * `display:none` or left detached. Browsers are entitled to stop decoding a
+ * video they are not painting, and both of those routes hit that path on at
+ * least one engine — the symptom is not an error but a permanently black crop,
+ * which enrolls successfully and then matches nobody. One transparent pixel in
+ * the corner is the price of the frames being real.
+ */
+function createCaptureVideo(stream: MediaStream): HTMLVideoElement {
+  const el = document.createElement("video");
+  el.srcObject = stream;
+  el.muted = true;
+  // iOS Safari refuses inline playback without this and opens the fullscreen
+  // player instead, which on a kiosk would cover the entire interface.
+  el.playsInline = true;
+  el.autoplay = true;
+  el.setAttribute("aria-hidden", "true");
+  el.style.cssText =
+    "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+  document.body.appendChild(el);
+  // Autoplay of a muted stream is allowed, but the promise still rejects if
+  // the element is torn down mid-start. Nothing to do about it either way.
+  void el.play().catch(() => undefined);
+  return el;
+}
+
+function destroyCaptureVideo(el: HTMLVideoElement | null): void {
+  if (!el) return;
+  el.pause();
+  // Drop the reference to the stream without stopping its tracks — the tracks
+  // belong to the OpenCam publisher, which is still sending them.
+  el.srcObject = null;
+  el.remove();
+}
+
+/**
+ * `null` while the camera has not made up its mind, a gallery label once it
+ * has, or the `"stranger"` sentinel for a face it is confident it has never
+ * seen. The three are genuinely different and the caller acts differently on
+ * each: wait, bind, enroll.
+ */
+export type ConfirmedIdentity = string | { stranger: true } | null;
+
+export const isStranger = (id: ConfirmedIdentity): id is { stranger: true } =>
+  typeof id === "object" && id !== null;
+
 export interface UseVisionOptions {
   enabled: boolean;
   sessionId?: string;
@@ -113,6 +201,17 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
   const [emotion, setEmotion] = useState<Emotion | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  /**
+   * The identity the kiosk is willing to act on: a gallery label confirmed by
+   * IDENTITY_MIN_FRAMES agreeing frames above IDENTITY_MIN_SIMILARITY, or
+   * `"stranger"` once a face has gone that long without resolving to one.
+   *
+   * State rather than a ref because binding a conversation to a person is a
+   * render-visible event; it changes a handful of times per visit, not per
+   * frame, which is the whole point of confirming it here rather than letting
+   * every consumer re-derive it from the raw stream.
+   */
+  const [identity, setIdentity] = useState<ConfirmedIdentity>(null);
 
   const camRef = useRef<OpenCam | null>(null);
   const lastUpdateRef = useRef(0);
@@ -127,6 +226,27 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
   /** Latest unsmoothed label, for diagnostics. Read through a function so it
    *  cannot cause a render on every frame. */
   const rawEmotionRef = useRef<string | null>(null);
+
+  // --- Identity confirmation and face capture ---
+  //
+  // All refs, all written from the `update` handler. That handler runs 15-25
+  // times a second; anything it puts in React state re-renders the whole app
+  // at that rate. Only the confirmed identity graduates to state, and only
+  // when it actually changes.
+
+  /** Consecutive frames agreeing on the same above-threshold name. */
+  const identityRunRef = useRef<{ name: string | null; frames: number }>({
+    name: null,
+    frames: 0,
+  });
+  /** Consecutive frames showing a face that resolved to nobody. */
+  const strangerRunRef = useRef(0);
+  const identityRef = useRef<ConfirmedIdentity>(null);
+  /** Nearest face geometry from the last frame, for cropping. */
+  const faceRef = useRef<{ box: Box; frame: FrameSize } | null>(null);
+  /** The published camera stream, kept so a still can be grabbed from it. */
+  const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (!enabled) {
@@ -149,6 +269,52 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
         identity: identityOf(nearest?.name),
         hasUnidentifiedFace: people.some((p) => p.has_face && !identityOf(p.name)),
       });
+      // Geometry for cropping a reference photo. `frame` travels with the box
+      // because the two are one unit — a box means nothing without the frame
+      // it was measured in (see lib/faceCrop.ts).
+      faceRef.current =
+        nearest?.face_box && snapshot.frame
+          ? { box: nearest.face_box as Box, frame: snapshot.frame }
+          : null;
+
+      // Identity confirmation. `matched` is a name this frame is confident
+      // enough about to count; anything weaker is treated as no match at all,
+      // not as a weak vote, because the run below must mean "N frames of
+      // real evidence" rather than "N frames of maybe".
+      const named = identityOf(nearest?.name);
+      const matched =
+        named && (nearest?.similarity ?? 0) >= IDENTITY_MIN_SIMILARITY ? named : null;
+
+      const run = identityRunRef.current;
+      // A different name restarts the count rather than continuing it: two
+      // frames of Ali and three of Sara are not five frames of anything.
+      run.frames = matched && matched === run.name ? run.frames + 1 : 1;
+      run.name = matched;
+
+      const seesFace = people.some((p) => p.has_face);
+      strangerRunRef.current = seesFace && !matched ? strangerRunRef.current + 1 : 0;
+
+      let confirmed: ConfirmedIdentity = identityRef.current;
+      if (matched && run.frames >= IDENTITY_MIN_FRAMES) {
+        confirmed = matched;
+      } else if (strangerRunRef.current >= STRANGER_MIN_FRAMES) {
+        confirmed = { stranger: true };
+      } else if (!seesFace && people.length === 0) {
+        // Nobody in frame at all: drop back to undecided so the next person to
+        // walk up is evaluated from scratch rather than inheriting a verdict.
+        confirmed = null;
+      }
+
+      // Compare by identity for the sentinel too — a fresh `{ stranger: true }`
+      // every frame would be a new object and would re-render forever.
+      const changed = isStranger(confirmed)
+        ? !isStranger(identityRef.current)
+        : confirmed !== identityRef.current;
+      if (changed) {
+        identityRef.current = confirmed;
+        setIdentity(confirmed);
+      }
+
       // Smoothed, not raw: see EMOTION_WINDOW_MS above for why.
       const label = nearest?.emotion?.label ?? null;
       rawEmotionRef.current = label;
@@ -176,11 +342,19 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
     return () => {
       camRef.current = null;
       void cam.destroy().catch(() => undefined);
+      destroyCaptureVideo(videoRef.current);
+      videoRef.current = null;
+      streamRef.current = null;
       setPublishing(false);
       setSignal(IDLE);
       emotionWindowRef.current = [];
       emotionRef.current = null;
       setEmotion(null);
+      identityRunRef.current = { name: null, frames: 0 };
+      strangerRunRef.current = 0;
+      faceRef.current = null;
+      identityRef.current = null;
+      setIdentity(null);
     };
   }, [enabled, sessionId]);
 
@@ -190,6 +364,17 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
     const timer = setInterval(() => {
       if (Date.now() - lastUpdateRef.current > STALE_MS) {
         setSignal((s) => (s.live ? IDLE : s));
+        // A verdict outlives the evidence for it otherwise: with inference
+        // stopped, the last confirmed identity would stay latched and the next
+        // person to walk up would be bound to whoever was here when the
+        // camera died.
+        if (identityRef.current !== null) {
+          identityRef.current = null;
+          identityRunRef.current = { name: null, frames: 0 };
+          strangerRunRef.current = 0;
+          faceRef.current = null;
+          setIdentity(null);
+        }
       }
     }, 1_000);
     return () => clearInterval(timer);
@@ -214,7 +399,12 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
       //    Discord during a call or a stream is the case we hit — made this
       //    request fail with NotReadableError, and the symptom was "the camera
       //    does not work" even though the camera itself was free.
-      await cam.start({ type: "camera", audio: false });
+      const stream = await cam.start({ type: "camera", audio: false });
+      streamRef.current = stream;
+      if (stream) {
+        destroyCaptureVideo(videoRef.current);
+        videoRef.current = createCaptureVideo(stream);
+      }
       setPublishing(true);
       setError(null);
     } catch (err: unknown) {
@@ -250,8 +440,31 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
 
   const disable = useCallback(async () => {
     await camRef.current?.stop().catch(() => undefined);
+    destroyCaptureVideo(videoRef.current);
+    videoRef.current = null;
+    streamRef.current = null;
     setPublishing(false);
     setSignal(IDLE);
+  }, []);
+
+  /**
+   * A JPEG of the face currently nearest the camera, for enrollment.
+   *
+   * Null whenever this moment cannot produce a usable reference photo — no
+   * camera, no face in the last frame, or a face too small or too close to the
+   * edge (see lib/faceCrop.ts). The caller is sampling a live stream, so null
+   * means "not this frame", never "broken".
+   */
+  const captureFace = useCallback(async (): Promise<Blob | null> => {
+    const video = videoRef.current;
+    const face = faceRef.current;
+    if (!video || !face) return null;
+    try {
+      return await cropFace({ video, box: face.box, frame: face.frame });
+    } catch (err) {
+      console.warn("[vision] face capture failed", err);
+      return null;
+    }
   }, []);
 
   /** The unsmoothed label, for debugging why the smoothed one settled where it did. */
@@ -260,5 +473,16 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
   /** OCR lines currently in frame — for "hold your paper up to the camera". */
   const readText = useCallback((): string[] => camRef.current?.get("text") ?? [], []);
 
-  return { signal, emotion, publishing, error, enable, disable, readText, readRawEmotion };
+  return {
+    signal,
+    emotion,
+    identity,
+    publishing,
+    error,
+    enable,
+    disable,
+    captureFace,
+    readText,
+    readRawEmotion,
+  };
 }

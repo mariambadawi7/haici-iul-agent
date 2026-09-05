@@ -247,20 +247,6 @@
     @apply shrink-0 text-center text-[11px] uppercase tracking-[0.3em] text-neutral-400 py-2;
   }
 
-  .dashboard-grid {
-    @apply flex-1 min-h-0 gap-4 p-3 md:gap-6 md:p-6;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  @media (min-width: 768px) {
-    .dashboard-grid {
-      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr);
-    }
-  }
-
   .main-panel {
     @apply flex flex-col rounded-2xl md:rounded-3xl overflow-hidden border border-neutral-200/80 bg-surface;
     box-shadow: 0 20px 50px -30px rgb(var(--neutral-900) / 0.18);

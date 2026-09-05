@@ -13,13 +13,7 @@ import {
   loadAudio,
   storeAudio,
 } from "../lib/audioStore";
-import {
-  loadActive,
-  loadSessions,
-  saveActive,
-  saveSessions,
-  uid,
-} from "../lib/storage";
+import { loadDraft, saveDraft, uid } from "../lib/storage";
 import type { ChatMessage, Session } from "../types";
 
 type Payload =
@@ -37,20 +31,59 @@ interface UseChatOpts {
    * captured when this hook mounted would always be stale.
    */
   getVisitor?: () => Visitor | null;
+  /**
+   * The id the WORKFLOW should see for this conversation, which is not the id
+   * this hook uses locally.
+   *
+   * n8n's Window Buffer Memory is keyed on `body.sessionId`, so whatever goes
+   * out here decides what the agent remembers. Returning `face:<uid>` is what
+   * makes the agent itself carry a person's conversation across visits, rather
+   * than only the interface replaying it. Returning null falls back to the
+   * local session id, which is the old per-visit behaviour and the right
+   * answer whenever the kiosk cannot see who it is talking to.
+   *
+   * Read at send time, not at setup: identity resolves a second or so into a
+   * conversation, so a value captured when this hook mounted is always stale.
+   */
+  getSessionKey?: () => string | null;
+  /**
+   * Called whenever the visible transcript changes, so the visitor store can
+   * persist it against the face it belongs to. Debouncing is the caller's job.
+   */
+  onMessagesChanged?: (messages: ChatMessage[]) => void;
 }
 
 /**
  * Single source of truth for chat state. Owns:
- *   - session list + active session (persisted to localStorage)
+ *   - the current conversation (there is only ever one; see below)
  *   - in-flight request lifecycle (one at a time, with abort)
  *   - retry cache: text is replayed from `message.originalText`,
  *     audio is replayed from IndexedDB → both survive a page reload
  *   - toast / error surface
+ *
+ * ONE CONVERSATION, NOT A LIST. The kiosk used to keep every conversation this
+ * browser had ever held and show them in a sidebar, which meant one visitor
+ * could read the previous visitor's transcript by scrolling. Conversations are
+ * now bound to a face and stored per person (lib/visitorApi.ts): starting a
+ * new one REPLACES the old rather than pushing onto a list, so the previous
+ * visitor's messages do not survive in memory either.
+ *
+ * The internal array is kept because every mutator below addresses a session
+ * by id, and collapsing it to a bare object buys nothing.
  */
-export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
-  const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
-  const [activeId, setActiveIdState] = useState<string | null>(() =>
-    loadActive(),
+export function useChat({
+  wantsAudio,
+  onAudio,
+  getVisitor,
+  getSessionKey,
+  onMessagesChanged,
+}: UseChatOpts) {
+  const [sessions, setSessions] = useState<Session[]>(() => {
+    const draft = loadDraft();
+    return draft ? [draft] : [];
+  });
+  const [activeId, setActiveIdState] = useState<string | null>(
+    () => loadDraft()?.id ?? null,
   );
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -58,12 +91,24 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
 
   const abortRef = useRef<AbortController | null>(null);
   // Latest opts captured for use inside dispatch closures.
-  const optsRef = useRef({ wantsAudio, onAudio, getVisitor });
-  optsRef.current = { wantsAudio, onAudio, getVisitor };
+  const optsRef = useRef({ wantsAudio, onAudio, getVisitor, getSessionKey, onMessagesChanged });
+  optsRef.current = { wantsAudio, onAudio, getVisitor, getSessionKey, onMessagesChanged };
 
   // ---- Persistence ----
-  useEffect(() => saveSessions(sessions), [sessions]);
-  useEffect(() => saveActive(activeId), [activeId]);
+  // The draft slot only ever holds the conversation on screen (see
+  // lib/storage.ts); the durable copy is the visitor record, written by the
+  // callback below.
+  const activeSession = sessions.find((s) => s.id === activeId) ?? null;
+  useEffect(() => {
+    saveDraft(activeSession);
+  }, [activeSession]);
+
+  useEffect(() => {
+    if (activeSession) optsRef.current.onMessagesChanged?.(activeSession.messages);
+    // Only the messages matter here — a title or timestamp change is not worth
+    // a write to the visitor store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.messages]);
 
   // ---- Auto-dismiss toast ----
   useEffect(() => {
@@ -102,6 +147,18 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
     setActiveIdState(id);
   }, []);
 
+  /**
+   * Start a fresh conversation, REPLACING whatever was on screen.
+   *
+   * The replacement is the point. When one visitor leaves and the next walks
+   * up, the previous transcript must be gone from this browser entirely — not
+   * pushed down a list where it can be scrolled back to. The durable copy is
+   * already safe in that visitor's own record.
+   *
+   * Any recorded audio still pending in IndexedDB for the outgoing
+   * conversation goes with it, or a stranger's voice message accumulates on
+   * the kiosk indefinitely with nothing left that could ever replay it.
+   */
   const createSession = useCallback((title = "New chat"): Session => {
     const now = Date.now();
     const s: Session = {
@@ -111,29 +168,45 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
       createdAt: now,
       updatedAt: now,
     };
-    setSessions((prev) => [s, ...prev]);
+    setSessions((prev) => {
+      for (const old of prev) {
+        for (const m of old.messages) {
+          if (m.role === "user" && m.hasAudioBlob) void deleteAudio(m.id);
+        }
+      }
+      return [s];
+    });
     setActiveIdState(s.id);
     return s;
   }, []);
 
-  const deleteSession = useCallback(
-    (id: string) => {
-      setSessions((prev) => {
-        const target = prev.find((s) => s.id === id);
-        if (target) {
-          for (const m of target.messages) {
-            if (m.role === "user") void deleteAudio(m.id);
-          }
-        }
-        const next = prev.filter((s) => s.id !== id);
-        if (activeId === id) setActiveIdState(next[0]?.id ?? null);
-        return next;
-      });
+  /**
+   * Load a recognised visitor's transcript into the conversation.
+   *
+   * Prepends rather than replaces: by the time a face resolves, the kiosk has
+   * usually already greeted the person and that exchange is on screen. Their
+   * history belongs above it, in the order it happened, not instead of it.
+   *
+   * Messages already present are matched by id and skipped, so a late-arriving
+   * record cannot duplicate the turns it overlaps with.
+   */
+  const prependMessages = useCallback(
+    (sessionId: string, history: ChatMessage[]) => {
+      if (history.length === 0) return;
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const present = new Set(s.messages.map((m) => m.id));
+          const missing = history.filter((m) => !present.has(m.id));
+          if (missing.length === 0) return s;
+          return { ...s, messages: [...missing, ...s.messages] };
+        }),
+      );
     },
-    [activeId],
+    [],
   );
 
-  // Ensure at least one session always exists.
+  // Ensure a conversation always exists.
   useEffect(() => {
     if (sessions.length === 0) {
       createSession();
@@ -226,13 +299,22 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
       });
 
       try {
-        const { wantsAudio: wa, onAudio: oa, getVisitor: gv } = optsRef.current;
+        const {
+          wantsAudio: wa,
+          onAudio: oa,
+          getVisitor: gv,
+          getSessionKey: gk,
+        } = optsRef.current;
         const askMainForAudio = wa && !twoStage;
         const visitor = gv?.() ?? null;
-        
+        // What the workflow sees. Local ids stay local; the agent's memory is
+        // keyed on this, so a recognised visitor continues the same thread
+        // they were on last visit.
+        const wireSessionId = gk?.() ?? sessionId;
+
         let reply: ChatReply;
         if (payload.kind === "text") {
-          reply = await sendChat(sessionId, payload.text, askMainForAudio, ctl.signal, visitor, "text");
+          reply = await sendChat(wireSessionId, payload.text, askMainForAudio, ctl.signal, visitor, "text");
         } else {
           updateMessage(sessionId, userMessageId, {
             content: "🎙️ (Transcribing...)",
@@ -253,7 +335,7 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
           
           // Mark the turn as spoken: the workflow can no longer infer it, since
           // the transcript reaches it as ordinary text.
-          reply = await sendChat(sessionId, transcript, askMainForAudio, ctl.signal, visitor, "audio");
+          reply = await sendChat(wireSessionId, transcript, askMainForAudio, ctl.signal, visitor, "audio");
           reply.question = transcript;
         }
 
@@ -421,13 +503,12 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
   }, []);
 
   return {
-    // session list
-    sessions,
+    // the current conversation
     active,
     activeId,
     setActiveId,
     createSession,
-    deleteSession,
+    prependMessages,
     // chat actions
     sendText,
     sendAudio,

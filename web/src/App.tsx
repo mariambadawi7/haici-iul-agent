@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
-import Sidebar from "./components/Sidebar";
+import { AlertTriangle, UserX } from "lucide-react";
 import ChatPanel from "./components/ChatPanel";
 import MessageInput from "./components/MessageInput";
 import LandingPage from "./components/LandingPage";
@@ -12,6 +11,7 @@ import { useChat } from "./hooks/useChat";
 import { useHardware } from "./hooks/useHardware";
 import { usePresence } from "./hooks/usePresence";
 import { useVision } from "./hooks/useVision";
+import { useVisitor } from "./hooks/useVisitor";
 import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
@@ -33,20 +33,58 @@ export default function App() {
   const tts = useTTS();
   const stt = useSTT();
 
-  // Written after `vision` is set up below; read only when a turn is sent, by
-  // which point it holds whatever the camera currently believes. A ref rather
-  // than a value because useChat is created before useVision runs.
+  // Camera vision. Off unless the tenant enables it, and silently inert if the
+  // vision backend is unreachable — the kiosk must not depend on it.
+  //
+  // Declared BEFORE useChat, unlike everything else here, because the chat
+  // layer now depends on it: which conversation is on screen, and which memory
+  // thread the workflow answers into, are both decided by who the camera says
+  // is standing here.
+  const vision = useVision({ enabled: features.camera });
+
+  const visitor = useVisitor({
+    enabled: features.camera,
+    identity: vision.identity,
+    captureFace: vision.captureFace,
+  });
+
+  // Written just below, once `vision` has a reading; read only when a turn is
+  // sent, by which point it holds whatever the camera currently believes.
   const visitorRef = useRef<{ name: string | null; emotion: string | null } | null>(null);
 
   const chat = useChat({
     wantsAudio: features.voice && tts.enabled,
     getVisitor: () => visitorRef.current,
+    // Face-keyed memory. n8n's Window Buffer Memory is keyed on the sessionId
+    // the workflow receives, so this is the single line that makes the AGENT
+    // remember a returning visitor rather than only the interface replaying
+    // the transcript at it.
+    getSessionKey: visitor.sessionKey,
+    onMessagesChanged: visitor.saveMessages,
     onAudio: (blob) => {
       tts.playBlob(blob).catch((e) =>
         console.error("[app] TTS playback failed", e),
       );
     },
   });
+
+  // Fold the recognised visitor's stored transcript in above whatever the
+  // conversation has already accumulated. This lands a beat after the wake —
+  // identity takes a few frames to confirm, and enrolling a stranger takes
+  // longer still — so the greeting is usually already on screen and their
+  // history slots in above it, in the order it happened.
+  const hydratedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const history = visitor.history;
+    const sessionId = chat.activeId;
+    if (!visitor.uid || !history?.length || !sessionId) return;
+    // Once per binding: prependMessages is id-deduplicated, but re-running it
+    // on every render would still churn the whole message array.
+    const token = `${visitor.uid}:${sessionId}`;
+    if (hydratedForRef.current === token) return;
+    hydratedForRef.current = token;
+    chat.prependMessages(sessionId, history);
+  }, [visitor.uid, visitor.history, chat]);
 
   const [view, setView] = useState<"landing" | "chat">("landing");
   const [health, setHealth] = useState<HealthState>({ status: "checking" });
@@ -189,10 +227,6 @@ export default function App() {
   // The kind actually rendered, which is not always the kind configured.
   const avatarKind = avatar.kind === "glb" && glbFailed ? "mascot" : avatar.kind;
 
-  // Camera vision. Off unless the tenant enables it, and silently inert if the
-  // vision backend is unreachable — the kiosk must not depend on it.
-  const vision = useVision({ enabled: features.camera });
-
   // The mascot is the agent's own face, so what it should express depends on
   // whose turn it is. While the agent is thinking or speaking it wears the
   // sentiment of its own answer. While it is idle or listening it has nothing
@@ -211,32 +245,58 @@ export default function App() {
     ? { name: vision.signal.identity, emotion: vision.emotion }
     : null;
 
+  /**
+   * How long the opening greeting waits for the camera to say who this is.
+   *
+   * The greeting is the first turn, so it is the turn that decides which
+   * memory thread the whole conversation lands in — sending it unbound means
+   * the agent starts a thread under the local session id and the rest of the
+   * visit continues somewhere else. Waiting is worth it.
+   *
+   * Sized for the slow path, not the fast one: a known face confirms in about
+   * five frames (a quarter of a second), while a stranger needs the
+   * confirmation window plus a crop and an upload. Past this the kiosk greets
+   * anyway — a person standing in front of a silent screen has no idea it is
+   * being careful, and only reads it as broken.
+   */
+  const BIND_GRACE_MS = 2_000;
+
   const startConversation = useCallback(
-    (name: string | null) => {
+    async (name: string | null) => {
       // createSession returns the session it just made. The `chat` object
-      // captured by the timeout below is from the PREVIOUS render, so its
-      // ensureActive() would resolve to the old session id — the greeting has
-      // to be addressed to this id explicitly (F-05 in
+      // captured below is from the PREVIOUS render, so its ensureActive()
+      // would resolve to the old session id — the greeting has to be
+      // addressed to this id explicitly (F-05 in
       // docs/CODE-REVIEW-FINDINGS.md).
       const session = chat.createSession();
       setView("chat");
+
+      const uid = await visitor.awaitBinding(BIND_GRACE_MS);
+      // Prefer what the visitor actually told us they are called over the
+      // gallery label: an auto-enrolled uid like `v7f3a9c1b2d` is not a name,
+      // and greeting someone with it is worse than not greeting them by name
+      // at all.
+      const known = visitor.displayName ?? (uid && !uid.startsWith("v") ? uid : null) ?? name;
+
       // The name comes from a face match, which can be wrong. It is phrased as
       // the visitor introducing themselves rather than as an assertion the
       // kiosk makes about them, so a mismatch reads as a misunderstanding the
       // person can correct, not as the machine insisting who they are.
-      const greeting = name ? `Hello! I'm ${name}.` : "Hello!";
-      setTimeout(() => chat.sendText(greeting, session.id), 120);
+      const greeting = known ? `Hello! I'm ${known}.` : "Hello!";
+      chat.sendText(greeting, session.id);
     },
-    [chat],
+    [chat, visitor],
   );
 
   const presence = usePresence({
     vision: vision.signal,
-    onWake: ({ name }) => startConversation(name),
+    onWake: ({ name }) => void startConversation(name),
     onDepart: () => {
-      // The visitor walked away. Clear the transcript so the next person does
-      // not arrive at a stranger's conversation, and stop any reply mid-speech.
+      // The visitor walked away. Flush their transcript to their own record,
+      // unbind, clear the screen so the next person does not arrive at a
+      // stranger's conversation, and stop any reply mid-speech.
       tts.stop();
+      visitor.release();
       chat.createSession();
       if (features.landing) setView("landing");
     },
@@ -268,6 +328,22 @@ export default function App() {
     },
   });
 
+  /**
+   * The visitor says the kiosk has the wrong person.
+   *
+   * Everything on screen belongs to the identity being disowned, so it all
+   * goes: the transcript is cleared and the conversation restarts unbound.
+   * `disown` (rather than `release`) is what keeps it unbound — the camera can
+   * still see the same face and would otherwise re-bind to it within a second.
+   */
+  const handleNotMe = useCallback(() => {
+    tts.stop();
+    chat.cancelInFlight();
+    visitor.disown();
+    hydratedForRef.current = null;
+    chat.createSession();
+  }, [chat, tts, visitor]);
+
   // The landing tap is also the gesture that lets the camera start, if the
   // tenant has vision on — getUserMedia refuses outside one. useVision picks
   // that up from the pointerdown itself, so nothing extra is needed here.
@@ -287,18 +363,39 @@ export default function App() {
       <BrandStrip
         className="z-10"
         actions={
-          features.landing && (
-            <button
-              onClick={() => setView("landing")}
-              className="btn-icon bg-surface shadow-sm hover:shadow-md hover:-translate-y-0.5 border-slate-200/80 text-slate-600 hover:text-teal-600"
-              title="Return Home"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
-              </svg>
-            </button>
-          )
+          <>
+            {/* The escape hatch for a wrong face match. With the conversation
+                list gone this is the ONLY way a misrecognised visitor can get
+                out of someone else's transcript, so it is on screen whenever
+                the kiosk has bound to a person rather than tucked away in the
+                admin console where the person standing here cannot reach it.
+                Named, because "not you?" is meaningless unless it says who it
+                thinks you are. */}
+            {visitor.status === "bound" && (
+              <button
+                onClick={handleNotMe}
+                className="flex items-center gap-2 px-3 h-10 rounded-full border border-slate-200/80 bg-surface shadow-sm text-xs text-slate-600 hover:text-warn-700 hover:border-warn-200 transition-colors"
+                title="Start a fresh conversation that is not linked to this face"
+              >
+                <UserX className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">
+                  Not {visitor.displayName ?? "you"}?
+                </span>
+              </button>
+            )}
+            {features.landing && (
+              <button
+                onClick={() => setView("landing")}
+                className="btn-icon bg-surface shadow-sm hover:shadow-md hover:-translate-y-0.5 border-slate-200/80 text-slate-600 hover:text-teal-600"
+                title="Return Home"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+              </button>
+            )}
+          </>
         }
       />
 
@@ -326,22 +423,13 @@ export default function App() {
       )}
 
       {/* Main App Layout */}
-      <div
-        className={`flex-1 flex min-h-0 p-4 md:p-6 gap-6 ${
-          features.sidebar ? "dashboard-grid" : ""
-        }`}
-      >
-        
-        {/* LEFT: Sidebar History */}
-        {features.sidebar && (
-          <Sidebar
-            sessions={chat.sessions}
-            activeId={chat.activeId}
-            onSelect={chat.setActiveId}
-            onCreate={() => chat.createSession()}
-            onDelete={chat.deleteSession}
-          />
-        )}
+      <div className="flex-1 flex min-h-0 p-4 md:p-6 gap-6">
+
+        {/* The conversation list is gone. It was a list of everyone who had
+            ever used this kiosk, readable by whoever was standing at it next;
+            a transcript now belongs to the face it came from and is fetched
+            when that face is recognised, not left on screen for the next
+            person to scroll through. */}
 
         {/* MIDDLE & RIGHT: The new Split layout */}
         <main className="flex-1 flex flex-col lg:flex-row-reverse min-w-0 main-panel overflow-hidden border border-slate-200 shadow-sm rounded-2xl bg-surface">

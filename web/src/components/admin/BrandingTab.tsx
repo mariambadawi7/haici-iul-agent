@@ -370,11 +370,6 @@ export default function BrandingTab({ passcode }: Props) {
           onChange={(landing) => set("features", { landing })}
         />
         <Toggle
-          label="Conversation history rail"
-          checked={config.features.sidebar}
-          onChange={(sidebar) => set("features", { sidebar })}
-        />
-        <Toggle
           label="Camera vision"
           checked={config.features.camera}
           onChange={(camera) => set("features", { camera })}

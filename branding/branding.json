@@ -31,7 +31,6 @@
     "avatar": true,
     "landing": true,
     "admin": true,
-    "sidebar": true,
     "camera": true
   },
   "content": {

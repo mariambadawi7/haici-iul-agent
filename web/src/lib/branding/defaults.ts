@@ -42,7 +42,6 @@ export const DEFAULT_CONFIG: TenantConfig = {
     avatar: true,
     landing: true,
     admin: true,
-    sidebar: true,
     camera: false,
   },
   content: {
