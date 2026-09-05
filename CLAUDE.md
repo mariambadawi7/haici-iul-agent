@@ -72,7 +72,7 @@ Each service has a host-bind volume at `./<service>_data/`. `whisper_data/` is o
 
 A Vite + React 18 + TypeScript + Tailwind app. Key shape:
 
-- **`hooks/useChat.ts` is the single source of truth for chat state.** It owns sessions (persisted to `localStorage`), the active session id, pending state, the toast, and the retriability set. There is one in-flight `AbortController` — sending a new message cancels the previous one. The hook is the only place `dispatch()` lives.
+- **`hooks/useChat.ts` is the single source of truth for chat state.** It owns the current conversation, pending state, the toast, and the retriability set. There is one in-flight `AbortController` — sending a new message cancels the previous one. The hook is the only place `dispatch()` lives. **There is one conversation, not a list**: `createSession()` REPLACES what was on screen, so the previous visitor's transcript does not survive in memory for the next person to scroll back to.
 - **Retry survives reloads.** Text messages cache `originalText` on the message itself; voice recordings get stored in IndexedDB keyed by message id (`lib/audioStore.ts`). On boot, `useChat` hydrates the `retriable` Set from both sources, so the Retry button on a failed message works even after a page refresh.
 - **`ErrorBoundary` and `HealthBanner`.** `main.tsx` wraps `<App>` in `ErrorBoundary` so a render crash shows a recovery screen instead of a blank page. `App.tsx` runs `checkHealth()` on mount and shows an amber banner at the top whenever the n8n webhook is unreachable or the workflow is inactive.
 - **State machine for the avatar** lives in `web/src/App.tsx` and resolves a single `FaceState` (`idle | listening | thinking | speaking`) from the union of TTS/STT/pending booleans. Whichever renderer is active (see § The avatar) reads that one prop plus an `amplitude` 0..1 driven by a WebAudio AnalyserNode tap on the playback element — that's where the lip-sync comes from. When TTS is off, `App.tsx` synthesises the envelope from the reply's length instead, so the mouth still moves on text-only turns.
@@ -94,7 +94,7 @@ A Vite + React 18 + TypeScript + Tailwind app. Key shape:
   - **Voice turn:** `POST multipart/form-data` with `file` (the recorded blob), `sessionId`, and `wantsAudio` as form fields. Audio goes to the separate `STT Webhook` workflow (`POST /webhook/stt`), which transcribes via Groq and returns `{ text, language, error }`. The Agent Workflow's own audio branch was removed — there is one way in for audio.
 - **Response shape** (JSON): `{ answer, question?, audioBase64?, audioMime? }`. `question` is the transcript on voice turns and replaces the placeholder bubble in the UI. When `wantsAudio:true`, the workflow's `Gemini TTS` node fills `audioBase64`.
 - **The workflow must be Active.** `/webhook-test/rag-agent` only listens for one call per Listen click; subsequent calls succeed in n8n's execution history but the HTTP response never reaches the browser (it surfaces as `NetworkError when attempting to fetch resource`). Toggle the workflow Active in n8n and use `/webhook/rag-agent`.
-- **Sessions** are stored in `localStorage` only (see `web/src/lib/storage.ts`). No server-side persistence — clearing site data wipes them. The voice retry cache is in-memory only; reloading the page disables Retry on already-failed voice messages.
+- **Conversations are bound to a face, not to the browser** — see § Face-bound conversations. `localStorage` holds only a single-slot draft of the conversation on screen (`web/src/lib/storage.ts`), so a reload does not wipe what someone is mid-sentence on; the durable copy is the visitor record. The voice retry cache is in-memory only; reloading the page disables Retry on already-failed voice messages.
 - **Branding is runtime config, not code.** Nothing in `web/src` names a client. See § White-labelling below.
 
 ## White-labelling
@@ -108,6 +108,99 @@ The frontend is sold to different businesses, so every visual detail is data rat
 - **Do not add `transition: all`.** Chrome will not re-resolve a transitioning property when the custom property behind it changes, leaving elements stuck on the previous tenant's colours. Enumerate the properties instead; `theme.ts` also freezes transitions across a theme swap.
 - Config resolves before the first React render (`main.tsx`), so components read it synchronously via `useTenant()` — there is no loading state. A missing or malformed file degrades to neutral defaults rather than a blank screen.
 - Browser storage keys are tenant-scoped through `lib/branding/scope.ts`, so two tenants can share an origin without reading each other's conversations.
+
+## Face-bound conversations
+
+There is no conversation history rail any more. A transcript belongs to the
+**face** it came from: the camera recognises someone, the kiosk fetches their
+conversation and profile, and the agent continues where they left off.
+
+**The UID is the vision backend's gallery label, and that is not a choice.** The
+backend never sends a face embedding to the browser — it matches SFace vectors
+server-side against a gallery rebuilt from `opencam/faces/` every five seconds
+and returns a label. So the only durable identifier the kiosk can hold is a
+gallery entry, which makes "give this stranger an id" and "enroll this stranger"
+the same operation.
+
+- **Enrollment is silent and automatic.** A face the camera cannot match, held
+  for `STRANGER_MIN_FRAMES`, gets a crop written to `faces/<uid>/1.jpg` — a
+  per-person **subdirectory**, because the backend's labeller strips a trailing
+  `_<digits>` from a flat filename and would fuse two visitors into one. More
+  samples are added during the conversation to strengthen a reference photo
+  taken in one pose under one light.
+- **Minted uids are `v` + 10 hex** (`newUid`). The leading letter matters: an
+  all-digit uid looks like a sample suffix. A staff-added photo is a uid too —
+  `Mariam_Badawi.jpeg` is the identity "Mariam Badawi" — and takes the same path.
+- **A uid never changes.** A name learned later is `profile.displayName`;
+  renaming the gallery entry would rewrite the key every record and every n8n
+  memory thread is filed under.
+- **Binding is stricter than the backend, and locked.** The backend matches at
+  cosine 0.363, which is right for labelling a box on a dashboard and wrong for
+  keying a transcript — a false match shows one person another person's
+  conversation. `useVision` requires a higher similarity across consecutive
+  frames; `useVisitor` then locks that identity for the whole conversation, so
+  someone leaning in over a visitor's shoulder cannot swap whose transcript is
+  displayed.
+- **Nothing here may block the kiosk.** No camera, sidecar down, face too small
+  to crop, enrollment refused — every failure ends in an unbound conversation,
+  which is how the kiosk behaved before any of this existed.
+- **"Not you?"** in the header is the escape hatch for a wrong match, and the
+  only one the person standing at the kiosk can reach. It unbinds *and stays
+  unbound* (`disown`, not `release`) — the camera still sees the same face and
+  would re-bind within a second.
+
+### Where it lives
+
+| Piece | File |
+|---|---|
+| Face crop from the live stream | `web/src/lib/faceCrop.ts` |
+| Confirmed identity + `captureFace()` | `web/src/hooks/useVision.ts` |
+| Bind / enroll / lock / persist | `web/src/hooks/useVisitor.ts` |
+| Sidecar store + gallery writes | `web/visitor-store.ts`, routes in `ws-server.ts` |
+| Browser client | `web/src/lib/visitorApi.ts` |
+| Staff view and deletion | `web/src/components/admin/VisitorsTab.tsx` |
+
+**The face box needs two sets of dimensions.** The backend reports boxes in the
+frame *it* received (`Snapshot.frame`), and WebRTC downscales adaptively, so the
+local `<video>` can be decoding at a different resolution. Every box is scaled by
+`videoWidth / frame.w` before cropping — a multiply by one when they agree, and
+the difference between a usable reference photo and a silent permanent
+recognition failure when they do not.
+
+**Records are served only to the local Vite proxy.** Port 3001 is published on
+every interface for the ESP32, and a visitor record is a named person's
+transcript, so `requireLoopback` gates those routes. The websocket Origin check
+is not sufficient: a LAN `curl` sends no Origin, which that check deliberately
+permits so the hardware can connect.
+
+**Mounts.** `./visitors:/app/visitors` for the records, and
+`${OPENCAM_FACES_DIR:-../opencam/faces}:/app/faces` **read-write** — the same
+host directory the OpenCam project mounts read-only. This is the one place the
+two compose projects share a filesystem; set `OPENCAM_FACES_DIR` if they are not
+siblings on disk.
+
+### Privacy consequences, stated plainly
+
+Faces are enrolled **without asking**, and transcripts are stored against them.
+Two things make that defensible and both are load-bearing:
+
+1. The **Visitors** tab in `#/admin` lists every stored face and deletes one on
+   request — the record, the profile *and* the photo, including a flat
+   staff-curated file, because a deletion that leaves someone recognisable is
+   not one.
+2. The answer cache is fenced on **content**, not on the shape of the question.
+   See `tools/workflow-patches/` — the agent's memory is keyed on the face now,
+   so it will answer personally to questions no regex classifies as personal.
+
+### Profile extraction
+
+What a visitor volunteers about themselves is mined by a **separate** workflow
+(`Profile Extract`, `POST /webhook/profile-extract`), called fire-and-forget
+after the turn is already answered. It is deliberately not in the Agent
+Workflow: that graph is 48 nodes with a delicate answer path, and extraction is
+not on the critical path. A regex gate decides whether a model call is justified
+at all, since most turns ask about the university and say nothing about who is
+asking. Every failure returns an empty delta.
 
 ## The avatar
 

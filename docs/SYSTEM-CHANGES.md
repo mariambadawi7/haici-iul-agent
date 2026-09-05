@@ -1428,7 +1428,122 @@ unreachable and age out on TTL) rather than being mistaken for shared keys.
 
 ---
 
-## 8. Cross-cutting design principles worth naming in the report
+## 8. Face-bound conversations
+
+**The change.** The kiosk no longer keeps a list of conversations. A transcript
+belongs to the *face* it came from: the camera recognises a returning visitor,
+the kiosk fetches their conversation and their profile, and the agent continues
+the thread it was on last time. The sidebar that listed every conversation the
+browser had ever held is gone — with it went the fact that any visitor could
+scroll back through the previous visitor's transcript.
+
+**The constraint that shaped everything.** The vision backend never sends a face
+embedding to the browser. It matches SFace vectors server-side against a gallery
+it rebuilds from a directory every five seconds, and returns one thing: a label.
+So the only durable identifier the kiosk can hold is a gallery entry — which
+means *issuing an id* and *enrolling a face* are the same operation, and the
+kiosk has to be able to write into the vision backend's own gallery. It does,
+through a bind mount, because that backend has no upload endpoint (only
+`GET /api/faces` and `POST /api/faces/reload`) and rescans on a timer anyway.
+
+**Three rules carry the design.**
+
+1. *Binding is locked for the conversation.* The camera reports the nearest
+   person every frame and the nearest person changes; a colleague leaning in
+   over someone's shoulder would otherwise swap whose transcript is on screen
+   mid-sentence.
+2. *Confirming an identity is stricter here than in the backend.* It matches at
+   cosine 0.363 — right for labelling a box on a dashboard, wrong for keying a
+   transcript, where a false match does not mislabel a box but shows one person
+   another person's conversation. The kiosk requires a higher similarity held
+   across consecutive frames, and waits far longer before concluding someone is
+   a stranger: enrolling a person who was about to be recognised splits their
+   history across two identities permanently.
+3. *Nothing may block the kiosk.* No camera, sidecar unreachable, face too small
+   to crop, enrollment refused — every failure path ends in an unbound
+   conversation, which is exactly how the kiosk behaved before this existed.
+
+**Two dimensions, not one.** The backend reports boxes in the frame *it*
+received; WebRTC downscales adaptively, so the browser's own `<video>` may be
+decoding at a different resolution. Cropping with the raw box works right up
+until the publisher drops resolution, and then silently enrolls a corner of
+someone's forehead. Every box is scaled by `videoWidth / frame.w` first.
+
+### 8.1 What this did to the answer cache
+
+This is the part worth reporting, because the interesting failure was not in the
+new code.
+
+The cache had a privacy fence already: a regex (`PERSONAL`) matched questions
+whose answer would be about the asker, and those got a private per-visitor key.
+Everything else was shared. That fence is a **prediction made from the
+question**, and it held only while the agent had nothing personal to say
+unprompted.
+
+Keying the agent's memory on the face invalidated that. n8n's Window Buffer
+Memory is keyed on the sessionId, now `face:<uid>`, so the agent carries what it
+learned about someone from one visit into the next — and will use it to answer a
+question the regex does not match. Observed live:
+
+> `"remind me what you know about me please"` — the regex wants "what **do** you
+> know about me" — returned *"You are Mariam Badawi, a third-year student in the
+> Faculty of Engineering"* and wrote it to the **shared** cache key.
+
+No regex fixes this. The leak does not depend on how the question was worded; it
+depends on what the model chose to say. So the fence stopped predicting and
+started **checking**: a turn is not cached if its text contains the visitor's
+name or any fact on file. Both sides of the turn, because a cached record stores
+the question too — `"i am Mariam Badawi"` answered with `"Thank you."` carries
+the name purely on the question side. That second case was found by the
+structural audit *after* the answer-only version shipped.
+
+Two related repairs came out of the same work:
+
+- The private key moved from the visitor's **name** to their **UID**. A name is
+  the wrong key twice over: an auto-enrolled visitor has none, and two people
+  who share one would share a private namespace.
+- `Correct Domain Terms` recomputed the key rule so the cache's dual write
+  matched, with a comment promising it mirrored the original "exactly". It had
+  drifted twice. It now appends the finished suffix the primary node publishes,
+  so the rule has exactly one author.
+
+**Measured after the change:** personalised turns write no cache key at all,
+impersonal turns still populate the shared key (so the cache still works for
+everyone), and `cache_key_audit.py` reports 0 LEAKED. The audit itself now reads
+the visitor store, or uid-keyed entries would land in UNVERIFIED and it would
+quietly stop verifying anything — the way a safety tool becomes decoration
+without ever failing.
+
+### 8.2 Profile extraction
+
+What a visitor volunteers about themselves is captured by a **separate**
+workflow called fire-and-forget after the turn is already answered, not by a
+node inserted into the Agent Workflow. That graph is 48 nodes with three
+branches fanning into the response chain and two dual-write IFs guarding the
+cache; a node added there that fails unexpectedly takes the kiosk down for every
+visitor. Extraction is also not on the critical path, so an in-turn model call
+would buy latency on every question to capture a fact on roughly one. A regex
+gate decides whether the call is justified at all.
+
+### 8.3 The privacy position, stated plainly
+
+Faces are enrolled **without asking**, and conversations are stored against
+them. Two things make that defensible, and both are load-bearing rather than
+nice-to-have: the **Visitors** tab in the operator console lists every stored
+face and deletes one on request — record, profile *and* photo, including a flat
+staff-curated file, because a deletion that leaves someone recognisable is not
+one — and the content-based cache fence above, which is what stops one visitor's
+answer reaching another.
+
+Visitor records are also served **only to the local Vite proxy**. Port 3001 is
+published on every interface because the ESP32 dials it directly, and unlike
+branding a visitor record is a named person's transcript; the websocket Origin
+gate does not cover it, since a LAN request sends no Origin at all and that is
+deliberately permitted so the hardware can connect.
+
+---
+
+## 9. Cross-cutting design principles worth naming in the report
 
 1. **Degrade, never break.** Every added subsystem — semantic lookup, Qdrant
    indexing, logging, branding load, typo correction — is wrapped so its failure
@@ -1447,7 +1562,7 @@ unreachable and age out on TTL) rather than being mistaken for shared keys.
 
 ---
 
-## 9. Repo landmarks
+## 10. Repo landmarks
 
 | Path | What |
 |---|---|
@@ -1459,7 +1574,10 @@ unreachable and age out on TTL) rather than being mistaken for shared keys.
 | `web/public/mascot/` | generated mascot artwork: 3 composites + face overlays |
 | `web/src/components/Mascot2D.tsx` | the rigged 2D avatar |
 | `web/src/lib/mascotRig.ts` | generated registration/pivot constants |
-| `web/ws-server.ts` | Bun sidecar: `/api/branding`, asset upload |
+| `web/ws-server.ts` | Bun sidecar: `/api/branding`, asset upload, `/api/visitors` |
+| `web/visitor-store.ts` | face-bound records; writes into the vision gallery |
+| `web/src/hooks/useVisitor.ts` | binds a conversation to a confirmed face |
+| `tools/workflow-patches/` | live-workflow edits, with reasoning and unit tests |
 | `web/src/lib/branding/` | `types` `defaults` `color` `theme` `store` `context` `scope` |
 | `web/src/hooks/useSTT.ts` | recording, container selection, silence gate |
 | `web/src/lib/api.ts` | webhook client + `audioFileName()` container mapping |

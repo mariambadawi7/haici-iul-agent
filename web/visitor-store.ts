@@ -231,16 +231,59 @@ export async function countFaceSamples(uid: string): Promise<number> {
 }
 
 /**
+ * Every gallery FILE that resolves to this uid.
+ *
+ * A uid this kiosk minted owns a directory, which is easy. A face a member of
+ * staff added is a flat file at the gallery root — `Mariam_Badawi.jpeg`, or
+ * `Mariam_Badawi_2.jpg` for a second reference — and the label is derived from
+ * the filename by rules that live in the vision backend. This mirrors
+ * `_label_from_path` in opencam/backend/pipeline/face_matcher.py: take the
+ * stem, drop a trailing `_<digits>`, turn underscores and hyphens into spaces.
+ *
+ * The two are not one code path, and treating them as one is how "forget this
+ * person" quietly became "forget their history but keep recognising them".
+ */
+async function flatGalleryFilesFor(uid: string): Promise<string[]> {
+  const entries = await readdir(FACES_DIR, { withFileTypes: true }).catch(() => []);
+  const wanted = uid.toLowerCase();
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const dot = entry.name.lastIndexOf(".");
+    if (dot <= 0) continue;
+    const ext = entry.name.slice(dot + 1).toLowerCase();
+    if (!["png", "jpg", "jpeg", "bmp", "webp"].includes(ext)) continue;
+    const label = entry.name
+      .slice(0, dot)
+      .replace(/_\d+$/, "")
+      .replace(/[_-]/g, " ")
+      .trim()
+      .toLowerCase();
+    if (label === wanted) out.push(`${FACES_DIR}/${entry.name}`);
+  }
+  return out;
+}
+
+/**
  * Forget a visitor completely: the transcript, the profile, and the face.
  *
  * Deleting the record alone would be worse than doing nothing — the gallery
  * entry would survive, so the person is still recognised, and the kiosk would
- * greet them under a uid it no longer holds any history for. Both halves go,
+ * greet them under a uid it no longer holds any history for. Every half goes,
  * and the face goes even when the record was already missing.
+ *
+ * That includes a staff-curated photo. Removing someone's own file is a real
+ * act and not one to take lightly, but this is the button a person is pointed
+ * at when they ask to be forgotten, and a "deletion" that leaves them
+ * recognisable is not one. The admin console labels which faces the kiosk
+ * enrolled itself so an operator can see what they are about to remove.
  */
 export async function forgetVisitor(uid: string): Promise<void> {
   await rm(recordPath(uid), { force: true });
   await rm(faceDir(uid), { recursive: true, force: true });
+  for (const file of await flatGalleryFilesFor(uid)) {
+    await rm(file, { force: true });
+  }
 }
 
 export type VisitorSummary = Omit<VisitorRecord, "messages"> & {
