@@ -65,13 +65,34 @@ export function withDefaults(partial?: PartialTenantConfig | null): TenantConfig
     const incoming = partial[key];
     if (incoming === undefined || incoming === null) continue;
 
-    if (typeof incoming !== "object") {
-      // `id` is the only scalar at the top level.
-      (out as unknown as Record<string, unknown>)[key] = incoming;
+    // Branch on the shape of the DEFAULT slot, not the type of the incoming
+    // value. Branching on the incoming type alone (the previous bug) let a
+    // scalar supplied for an object key — e.g. `{ theme: "dark" }` — replace
+    // the entire defaulted sub-object with that scalar. Every consumer reads
+    // `config.theme.brand`, `config.features.admin`, etc. synchronously with
+    // no guard, so that silently poisoned the whole config (see F-06/F-07).
+    const slot = out[key];
+    const slotIsObject = typeof slot === "object" && slot !== null && !Array.isArray(slot);
+
+    if (!slotIsObject) {
+      // A scalar slot (currently only `id`) takes a scalar. Reject an object.
+      if (typeof incoming !== "object") {
+        (out as unknown as Record<string, unknown>)[key] = incoming;
+      } else {
+        console.warn(`[branding] ignoring object supplied for scalar field "${key}"`);
+      }
       continue;
     }
 
-    const target = out[key] as unknown as Record<string, unknown>;
+    // An object slot takes only an object. A scalar here would replace an
+    // entire defaulted branch (theme, features, …) and every consumer reads
+    // those synchronously with no guard, so it must be dropped, not merged.
+    if (typeof incoming !== "object" || Array.isArray(incoming)) {
+      console.warn(`[branding] ignoring ${typeof incoming} supplied for object field "${key}"`);
+      continue;
+    }
+
+    const target = slot as unknown as Record<string, unknown>;
     for (const [field, value] of Object.entries(incoming)) {
       if (value === undefined || value === null) continue;
       target[field] = value;
