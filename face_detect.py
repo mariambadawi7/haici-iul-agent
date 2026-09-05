@@ -15,6 +15,7 @@ import json
 import threading
 import time
 import sys
+import os
 
 # ── CONFIG ──────────────────────────────────────────────────────────
 WS_URL          = "ws://localhost:3001/ws?client=hardware"
@@ -83,10 +84,26 @@ def send_presence():
 def run_detection():
     global last_trigger_t, face_present
 
-    # Load OpenCV's built-in face detector
-    face_cascade = cv2.CascadeClassifier(
-    r'C:\Users\USER\Desktop\haici-agent\haarcascade_frontalface_default.xml'
-)
+    # Load OpenCV's built-in face detector. Prefer the copy that ships inside
+    # the installed opencv-python package, and fall back to the one committed
+    # next to this script. A hardcoded absolute path only works on the one
+    # machine it was written on, and CascadeClassifier fails SILENTLY on a
+    # missing file (returns an empty classifier instead of raising) — the
+    # error only surfaces later, as an opaque assertion failure inside
+    # detectMultiScale, well after "Camera opened" has already printed.
+    cascade_candidates = [
+        os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "haarcascade_frontalface_default.xml"),
+    ]
+    cascade_path = next((p for p in cascade_candidates if os.path.exists(p)), None)
+    if cascade_path is None:
+        sys.exit(f"[face] No Haar cascade found. Looked in: {cascade_candidates}")
+
+    face_cascade = cv2.CascadeClassifier(cascade_path)
+    if face_cascade.empty():
+        sys.exit(f"[face] Cascade at {cascade_path} failed to load.")
+    print(f"[face] Using cascade: {cascade_path}")
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
