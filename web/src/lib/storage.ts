@@ -20,16 +20,47 @@ export function loadSessions(): Session[] {
 }
 
 export function saveSessions(sessions: Session[]) {
-  localStorage.setItem(KEY(), JSON.stringify(sessions));
+  try {
+    localStorage.setItem(KEY(), JSON.stringify(sessions));
+  } catch (err) {
+    // Quota exhausted, or storage is blocked entirely (Safari private mode
+    // throws on every write). Persistence is a convenience here — the session
+    // list is already in React state — so degrade to in-memory rather than
+    // taking the whole kiosk down through the ErrorBoundary (saveSessions
+    // runs inside a useEffect in useChat.ts, and an uncaught throw there
+    // unwinds the render).
+    console.warn("[storage] could not persist sessions", err);
+    // A full quota is usually a long transcript history. Drop the oldest
+    // half and try once more so the CURRENT conversation still survives a
+    // reload. createSession in useChat.ts prepends (`[s, ...prev]`), so
+    // sessions[0] is the newest — keep the front slice, not the back.
+    if (sessions.length > 1) {
+      try {
+        const trimmed = sessions.slice(0, Math.ceil(sessions.length / 2));
+        localStorage.setItem(KEY(), JSON.stringify(trimmed));
+        console.warn(`[storage] pruned session history to ${trimmed.length} entries`);
+      } catch {
+        /* still failing — give up on persistence for this run */
+      }
+    }
+  }
 }
 
 export function loadActive(): string | null {
-  return localStorage.getItem(ACTIVE_KEY());
+  try {
+    return localStorage.getItem(ACTIVE_KEY());
+  } catch {
+    return null;
+  }
 }
 
 export function saveActive(id: string | null) {
-  if (id) localStorage.setItem(ACTIVE_KEY(), id);
-  else localStorage.removeItem(ACTIVE_KEY());
+  try {
+    if (id) localStorage.setItem(ACTIVE_KEY(), id);
+    else localStorage.removeItem(ACTIVE_KEY());
+  } catch (err) {
+    console.warn("[storage] could not persist the active session id", err);
+  }
 }
 
 export function uid(): string {
