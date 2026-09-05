@@ -116,6 +116,10 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
 
   const camRef = useRef<OpenCam | null>(null);
   const lastUpdateRef = useRef(0);
+  // Mirrors `publishing` for the gesture-listener effect below, whose closure
+  // is created once per effect run and would otherwise see a stale value.
+  const publishingRef = useRef(publishing);
+  publishingRef.current = publishing;
   const emotionWindowRef = useRef<Sample[]>([]);
   // Mirrors the committed emotion so the update handler can compare without
   // depending on state — at 20 fps this runs far more often than React renders.
@@ -205,15 +209,29 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
     }
   }, []);
 
-  // Satisfy the gesture requirement without asking the kiosk for a ritual tap:
-  // the first touch anywhere on the page starts the camera. On a kiosk that is
-  // the visitor tapping "Begin", or the staff waking the tablet in the morning.
-  // `once` plus the publishing guard means it runs exactly one time.
+  // Satisfy the browser's gesture requirement without asking the kiosk for a
+  // ritual tap: a touch anywhere on the page starts the camera. `once` is
+  // deliberately NOT used — a start can fail for transient reasons (signalling
+  // still in flight, a permission prompt dismissed by accident), and consuming
+  // the listener on a failure would disable the camera for the whole page load.
   useEffect(() => {
     if (!enabled || publishing) return;
-    const onGesture = () => void enable();
-    document.addEventListener("pointerdown", onGesture, { once: true });
-    return () => document.removeEventListener("pointerdown", onGesture);
+    let cancelled = false;
+    const onGesture = async () => {
+      if (cancelled) return;
+      document.removeEventListener("pointerdown", onGesture);
+      await enable();
+      // enable() swallows its own errors; if it did not start, listen again so
+      // the next tap gets another chance.
+      if (!cancelled && !publishingRef.current) {
+        document.addEventListener("pointerdown", onGesture);
+      }
+    };
+    document.addEventListener("pointerdown", onGesture);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("pointerdown", onGesture);
+    };
   }, [enabled, publishing, enable]);
 
   const disable = useCallback(async () => {
