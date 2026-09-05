@@ -17,7 +17,7 @@
  * `Validate Lexicon` node is the authority — a save can still come back
  * with a 400 naming the offending term, which is surfaced inline here.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -153,7 +153,10 @@ export default function LexiconEditor({ client, passcode }: Props) {
   const [terms, setTerms] = useState<LexiconTerm[]>([]);
 
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
-  const [aliasDrafts, setAliasDrafts] = useState<Record<number, string>>({});
+  // Keyed by canonical rather than by array index: removeTerm splices the array,
+  // which shifts every later index down one and would hand a pending draft to a
+  // different term than the one it was typed into (S-07).
+  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
 
   const [corrections, setCorrections] = useState<{
     topPairs: CorrectionStat[];
@@ -233,24 +236,35 @@ export default function LexiconEditor({ client, passcode }: Props) {
   }, [saved, thresholds, stoplist, terms]);
 
   const localIssue = useMemo(() => validateLocal(terms, thresholds), [terms, thresholds]);
+  const isSaving = status.kind === "saving";
+
+  // Clearing an error/saved banner on edit is intentional, but a save in flight
+  // must stay marked as such — otherwise the Save button re-enables mid-request
+  // and a second overlapping save can interleave with the first (F-13).
+  const clearTransientStatus = useCallback(() => {
+    setStatus((s) => (s.kind === "saving" ? s : { kind: "idle" }));
+  }, []);
 
   // -- term mutations -------------------------------------------------------
   const updateTerm = useCallback((i: number, patch: Partial<LexiconTerm>) => {
     setTerms((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
-    setStatus({ kind: "idle" });
-  }, []);
+    clearTransientStatus();
+  }, [clearTransientStatus]);
 
   const removeTerm = useCallback((i: number) => {
     setTerms((prev) => prev.filter((_, idx) => idx !== i));
-    setStatus({ kind: "idle" });
-  }, []);
+    clearTransientStatus();
+  }, [clearTransientStatus]);
 
   const addTerm = useCallback(() => {
     setTerms((prev) => [...prev, { canonical: "", aliases: [], fuzzy: false }]);
-    setStatus({ kind: "idle" });
-  }, []);
+    clearTransientStatus();
+  }, [clearTransientStatus]);
 
-  const addAlias = useCallback((i: number, alias: string) => {
+  // `draftKey` identifies the pending alias-input text in `aliasDrafts`
+  // (see the S-07 comment above its declaration) — it is independent of `i`,
+  // which is only needed here to locate the term to mutate.
+  const addAlias = useCallback((i: number, draftKey: string, alias: string) => {
     const trimmed = alias.trim();
     if (!trimmed) return;
     setTerms((prev) =>
@@ -260,9 +274,9 @@ export default function LexiconEditor({ client, passcode }: Props) {
         return { ...t, aliases: [...t.aliases, trimmed] };
       }),
     );
-    setAliasDrafts((prev) => ({ ...prev, [i]: "" }));
-    setStatus({ kind: "idle" });
-  }, []);
+    setAliasDrafts((prev) => ({ ...prev, [draftKey]: "" }));
+    clearTransientStatus();
+  }, [clearTransientStatus]);
 
   const removeAlias = useCallback((i: number, aliasIdx: number) => {
     setTerms((prev) =>
@@ -270,8 +284,8 @@ export default function LexiconEditor({ client, passcode }: Props) {
         idx === i ? { ...t, aliases: t.aliases.filter((_, ai) => ai !== aliasIdx) } : t,
       ),
     );
-    setStatus({ kind: "idle" });
-  }, []);
+    clearTransientStatus();
+  }, [clearTransientStatus]);
 
   /** Adds `alias` to whichever term's canonical matches `targetCanonical`
    *  (case-insensitive), creating a new term if none matches yet. Used by
@@ -299,12 +313,18 @@ export default function LexiconEditor({ client, passcode }: Props) {
         i === idx ? { ...t, aliases: [...t.aliases, trimmedAlias] } : t,
       );
     });
-    setStatus({ kind: "idle" });
-  }, []);
+    clearTransientStatus();
+  }, [clearTransientStatus]);
 
   // -- save -------------------------------------------------------------
+  // Guards against overlapping saves: with the form locked (isSaving disables
+  // every TermRow input) a second save cannot normally be triggered, but this
+  // is a cheap backstop so a stale response can never win over a newer one.
+  const saveSeqRef = useRef(0);
+
   async function handleSave() {
-    if (localIssue) return;
+    if (localIssue || status.kind === "saving") return;
+    const seq = ++saveSeqRef.current;
     setStatus({ kind: "saving" });
     const payload: Lexicon = {
       version,
@@ -315,6 +335,7 @@ export default function LexiconEditor({ client, passcode }: Props) {
     };
     try {
       const result = await client.saveLexicon(passcode, payload);
+      if (seq !== saveSeqRef.current) return; // a newer save superseded this one
       const clone = cloneLexicon(result);
       setSaved(clone);
       setVersion(clone.version);
@@ -324,6 +345,7 @@ export default function LexiconEditor({ client, passcode }: Props) {
       setStatus({ kind: "saved" });
       setTimeout(() => setStatus((s) => (s.kind === "saved" ? { kind: "idle" } : s)), 2500);
     } catch (err) {
+      if (seq !== saveSeqRef.current) return; // a newer save superseded this one
       if (err instanceof AdminValidationError) {
         const termIndex = terms.findIndex(
           (t) => t.canonical && err.message.includes(`"${t.canonical}"`),
@@ -429,22 +451,30 @@ export default function LexiconEditor({ client, passcode }: Props) {
               />
             ) : (
               <div className="mt-3 space-y-3">
-                {terms.map((t, i) => (
-                  <TermRow
-                    key={i}
-                    term={t}
-                    index={i}
-                    minFuzzyLen={thresholds.minFuzzyLen}
-                    highlighted={errorTermIndex === i}
-                    aliasDraft={aliasDrafts[i] ?? ""}
-                    onCanonicalChange={(v) => updateTerm(i, { canonical: v })}
-                    onFuzzyChange={(v) => updateTerm(i, { fuzzy: v })}
-                    onAliasDraftChange={(v) => setAliasDrafts((prev) => ({ ...prev, [i]: v }))}
-                    onAddAlias={() => addAlias(i, aliasDrafts[i] ?? "")}
-                    onRemoveAlias={(aliasIdx) => removeAlias(i, aliasIdx)}
-                    onRemoveTerm={() => removeTerm(i)}
-                  />
-                ))}
+                {terms.map((t, i) => {
+                  // A newly-added term has an empty canonical until the operator
+                  // types one, so it still needs an index-based fallback key.
+                  const draftKey = t.canonical || `__new_${i}`;
+                  return (
+                    <TermRow
+                      key={draftKey}
+                      term={t}
+                      index={i}
+                      minFuzzyLen={thresholds.minFuzzyLen}
+                      highlighted={errorTermIndex === i}
+                      aliasDraft={aliasDrafts[draftKey] ?? ""}
+                      disabled={isSaving}
+                      onCanonicalChange={(v) => updateTerm(i, { canonical: v })}
+                      onFuzzyChange={(v) => updateTerm(i, { fuzzy: v })}
+                      onAliasDraftChange={(v) =>
+                        setAliasDrafts((prev) => ({ ...prev, [draftKey]: v }))
+                      }
+                      onAddAlias={() => addAlias(i, draftKey, aliasDrafts[draftKey] ?? "")}
+                      onRemoveAlias={(aliasIdx) => removeAlias(i, aliasIdx)}
+                      onRemoveTerm={() => removeTerm(i)}
+                    />
+                  );
+                })}
               </div>
             )}
           </>
@@ -662,6 +692,7 @@ function TermRow({
   minFuzzyLen,
   highlighted,
   aliasDraft,
+  disabled,
   onCanonicalChange,
   onFuzzyChange,
   onAliasDraftChange,
@@ -674,6 +705,7 @@ function TermRow({
   minFuzzyLen: number;
   highlighted: boolean;
   aliasDraft: string;
+  disabled: boolean;
   onCanonicalChange: (v: string) => void;
   onFuzzyChange: (v: boolean) => void;
   onAliasDraftChange: (v: string) => void;
@@ -699,6 +731,7 @@ function TermRow({
             onChange={(e) => onCanonicalChange(e.target.value)}
             placeholder="e.g. IUL"
             dir="auto"
+            disabled={disabled}
             className="input !py-2 mt-0.5 text-sm font-medium"
           />
         </div>
@@ -710,6 +743,7 @@ function TermRow({
               type="checkbox"
               checked={term.fuzzy}
               onChange={(e) => onFuzzyChange(e.target.checked)}
+              disabled={disabled}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-400/40"
             />
             <span className="text-xs text-slate-600">
@@ -721,6 +755,7 @@ function TermRow({
         <button
           type="button"
           onClick={onRemoveTerm}
+          disabled={disabled}
           className="btn-ghost !py-2 !px-2.5 text-red-600 hover:!bg-red-50 shrink-0 mt-4"
           aria-label={`Delete term ${canonical || `#${index + 1}`}`}
         >
@@ -749,7 +784,8 @@ function TermRow({
               <button
                 type="button"
                 onClick={() => onRemoveAlias(ai)}
-                className="text-slate-400 hover:text-red-600"
+                disabled={disabled}
+                className="text-slate-400 hover:text-red-600 disabled:opacity-30"
                 aria-label={`Remove alias ${a}`}
               >
                 <X className="w-3 h-3" />
@@ -769,12 +805,13 @@ function TermRow({
               }}
               placeholder="add alias…"
               dir="auto"
-              className="text-xs px-2.5 py-1 rounded-full border border-dashed border-slate-300 bg-surface focus:outline-none focus:border-teal-400 w-32"
+              disabled={disabled}
+              className="text-xs px-2.5 py-1 rounded-full border border-dashed border-slate-300 bg-surface focus:outline-none focus:border-teal-400 w-32 disabled:opacity-50"
             />
             <button
               type="button"
               onClick={onAddAlias}
-              disabled={!aliasDraft.trim()}
+              disabled={disabled || !aliasDraft.trim()}
               className="text-slate-400 hover:text-teal-600 disabled:opacity-30"
               aria-label="Add alias"
             >
