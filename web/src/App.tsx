@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import ChatPanel from "./components/ChatPanel";
 import MessageInput from "./components/MessageInput";
@@ -49,6 +50,12 @@ export default function App() {
 
   const [view, setView] = useState<"landing" | "chat">("landing");
   const [health, setHealth] = useState<HealthState>({ status: "checking" });
+  // Set when the tenant's GLB fails to load. `glb` is the one avatar kind
+  // that depends on a fetched asset, so it is the one that can leave the
+  // panel empty on a typo'd URL or an upload that never landed. Falling
+  // back to the mascot keeps a face on screen; it ships in the repo and
+  // needs nothing fetched (S-04 in docs/CODE-REVIEW-FINDINGS.md).
+  const [glbFailed, setGlbFailed] = useState(false);
 
   useEffect(() => {
     console.info("[app] booted", {
@@ -173,6 +180,15 @@ export default function App() {
     return "neutral";
   }, [chat.active?.messages]);
 
+  // A new model URL deserves a fresh attempt: an operator who fixes the URL
+  // in #/admin should see the 3D head come back without reloading the kiosk.
+  useEffect(() => {
+    setGlbFailed(false);
+  }, [avatar.glbUrl]);
+
+  // The kind actually rendered, which is not always the kind configured.
+  const avatarKind = avatar.kind === "glb" && glbFailed ? "mascot" : avatar.kind;
+
   // Camera vision. Off unless the tenant enables it, and silently inert if the
   // vision backend is unreachable — the kiosk must not depend on it.
   const vision = useVision({ enabled: features.camera });
@@ -288,6 +304,23 @@ export default function App() {
 
       <HealthBanner health={health} onRecheck={runHealthCheck} />
 
+      {/* F-11: a camera that silently never starts is worse than one that
+          visibly fails — nobody investigates a kiosk that looks fine. This is
+          deliberately NOT folded into HealthBanner: that banner reports
+          whether the n8n workflow is reachable, and a dead camera must not be
+          able to claim the workflow is down, nor mask a real outage by
+          occupying the same slot. Answering questions still works without a
+          camera, so this informs rather than alarms. */}
+      {features.camera && vision.error && (
+        <div className="px-4 py-2 text-xs text-warn-700 bg-warn-50 border-b border-warn-200 flex items-center justify-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span className="leading-snug">
+            The camera could not start, so the kiosk cannot recognise visitors.
+            Tap anywhere to try again.
+          </span>
+        </div>
+      )}
+
       {/* Main App Layout */}
       <div
         className={`flex-1 flex min-h-0 p-4 md:p-6 gap-6 ${
@@ -310,14 +343,14 @@ export default function App() {
         <main className="flex-1 flex flex-col lg:flex-row-reverse min-w-0 main-panel overflow-hidden border border-slate-200 shadow-sm rounded-2xl bg-surface">
           
           {/* RIGHT: Robot Command Center */}
-          {features.avatar && avatar.kind !== "none" && (
+          {features.avatar && avatarKind !== "none" && (
           <div className="relative shrink-0 lg:w-[22rem] flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 transition-all">
 
              {/* The assistant — the rigged 2D mascot, an animated 3D head, or
                  a still image for tenants who supplied flat artwork. All three
                  read the same face state and speech amplitude. */}
              <div className="h-52 lg:h-80 w-full flex items-center justify-center">
-                {avatar.kind === "mascot" ? (
+                {avatarKind === "mascot" ? (
                   <Mascot2D
                     state={faceState}
                     amplitude={effectiveAmplitude}
@@ -329,12 +362,13 @@ export default function App() {
                       avatar.mascotView === "head" ? "w-full" : "h-full"
                     }`}
                   />
-                ) : avatar.kind === "glb" ? (
+                ) : avatarKind === "glb" ? (
                   <Avatar3D
                     state={faceState}
                     amplitude={effectiveAmplitude}
                     emotion={emotion}
                     modelUrl={avatar.glbUrl}
+                    onLoadError={() => setGlbFailed(true)}
                   />
                 ) : (
                   avatar.imageUrl && (
