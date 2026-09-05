@@ -176,54 +176,72 @@ export function useSTT() {
 
   const stop = useCallback(async (): Promise<StopResult> => {
     const rec = recorderRef.current;
-    if (!rec) {
-      return { blob: null, reason: "Recorder was not running." };
+    // Re-entrancy guard: the hardware button and the on-screen mic button can
+    // both call stop() for the same recorder. Once it is gone or already
+    // inactive there is nothing left to tear down here — the first caller's
+    // finally block (below) already did it.
+    if (!rec || rec.state === "inactive") {
+      return { blob: null, reason: "Nothing was being recorded." };
     }
     const tooShort = Date.now() - startedAtRef.current < 350;
-    const result = await new Promise<StopResult>((resolve) => {
-      rec.onstop = () => {
-        const mime = rec.mimeType || "audio/webm";
-        if (chunksRef.current.length === 0) {
-          resolve({
-            blob: null,
-            reason: tooShort
-              ? "Recording was too short — hold the mic for at least half a second."
-              : "Microphone produced no audio data.",
-          });
-          return;
+    let result: StopResult;
+    try {
+      result = await new Promise<StopResult>((resolve) => {
+        rec.onstop = () => {
+          const mime = rec.mimeType || "audio/webm";
+          if (chunksRef.current.length === 0) {
+            resolve({
+              blob: null,
+              reason: tooShort
+                ? "Recording was too short — hold the mic for at least half a second."
+                : "Microphone produced no audio data.",
+            });
+            return;
+          }
+          const blob = new Blob(chunksRef.current, { type: mime });
+          if (blob.size < 200) {
+            resolve({
+              blob: null,
+              reason: "Recording was empty — please try again.",
+            });
+            return;
+          }
+          // Nothing above the noise floor: sending this gets a hallucinated
+          // transcript back rather than an error, so stop it here.
+          if (peakRef.current < 0.05) {
+            resolve({
+              blob: null,
+              reason:
+                "No speech was picked up — check the microphone and try again.",
+            });
+            return;
+          }
+          resolve({ blob });
+        };
+        try {
+          rec.requestData(); // flush any in-progress buffer before stopping
+        } catch {
+          /* not all browsers support; safe to ignore */
         }
-        const blob = new Blob(chunksRef.current, { type: mime });
-        if (blob.size < 200) {
-          resolve({
-            blob: null,
-            reason: "Recording was empty — please try again.",
-          });
-          return;
+        try {
+          rec.stop();
+        } catch (err) {
+          // Already inactive — the device was unplugged, permission was revoked,
+          // or a second caller (hardware button vs on-screen button) got here
+          // first. Resolve with whatever we have rather than rejecting, because
+          // rejecting skips the teardown below and leaves the mic open.
+          console.warn("[stt] recorder was already stopped", err);
+          resolve({ blob: null, reason: "Recording ended unexpectedly — please try again." });
         }
-        // Nothing above the noise floor: sending this gets a hallucinated
-        // transcript back rather than an error, so stop it here.
-        if (peakRef.current < 0.05) {
-          resolve({
-            blob: null,
-            reason:
-              "No speech was picked up — check the microphone and try again.",
-          });
-          return;
-        }
-        resolve({ blob });
-      };
-      try {
-        rec.requestData(); // flush any in-progress buffer before stopping
-      } catch {
-        /* not all browsers support; safe to ignore */
-      }
-      rec.stop();
-    });
-    releaseStream();
-    recorderRef.current = null;
-    chunksRef.current = [];
-    cleanupAnalyser();
-    setStatus("idle");
+      });
+    } finally {
+      // The microphone must be released on every exit path, including a throw.
+      releaseStream();
+      recorderRef.current = null;
+      chunksRef.current = [];
+      cleanupAnalyser();
+      setStatus("idle");
+    }
     if (result.blob) {
       console.info("[stt] recording stopped", {
         bytes: result.blob.size,
