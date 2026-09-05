@@ -25,8 +25,6 @@ export interface ChatReply {
   error?: string;
   /** Workflow node where the error happened, if known. */
   stage?: string;
-  /** Facts about the visitor the workflow picked out of this turn. */
-  profileDelta?: ProfileDelta;
 }
 
 function base64ToBlob(b64: string, mime: string): Blob {
@@ -53,22 +51,6 @@ function parseReply(data: any): ChatReply {
   if (data.question) reply.question = String(data.question);
   if (data.error) reply.error = String(data.error);
   if (data.stage) reply.stage = String(data.stage);
-  // Shape-checked rather than trusted: this is merged into a stored profile,
-  // and a malformed delta from a mis-edited workflow node must be dropped
-  // rather than written through.
-  if (data.profileDelta && typeof data.profileDelta === "object") {
-    const raw = data.profileDelta;
-    const delta: ProfileDelta = {};
-    if (typeof raw.displayName === "string" && raw.displayName.trim()) {
-      delta.displayName = raw.displayName.trim();
-    }
-    if (Array.isArray(raw.facts)) {
-      delta.facts = raw.facts
-        .filter((f: any) => f && typeof f.key === "string" && typeof f.value === "string")
-        .map((f: any) => ({ key: f.key, value: f.value }));
-    }
-    if (delta.displayName || delta.facts?.length) reply.profileDelta = delta;
-  }
   return reply;
 }
 
@@ -187,13 +169,62 @@ export interface Visitor {
 }
 
 /**
- * Facts the workflow extracted from this turn, to merge into the visitor's
- * stored profile. Absent on the overwhelming majority of turns — a question
- * about opening hours says nothing about who is asking it.
+ * Facts extracted from a turn, to merge into the visitor's stored profile.
+ * Empty on the overwhelming majority of turns — a question about opening hours
+ * says nothing about who is asking it.
  */
 export interface ProfileDelta {
   displayName?: string | null;
   facts?: Array<{ key: string; value: string }>;
+}
+
+/**
+ * Ask the workflow to pull durable facts about the visitor out of a turn.
+ *
+ * A SEPARATE webhook from the chat one, and separate on purpose. The Agent
+ * Workflow is 48 nodes whose answer path is delicate, extraction is not on the
+ * critical path -- the turn has already been answered and rendered before this
+ * runs -- and putting a model call inside the turn would buy latency on every
+ * question in exchange for a fact captured on roughly one. The blast radius of
+ * a failure here is one missing fact.
+ *
+ * Fire-and-forget: resolves to null on any failure, and callers do not await it
+ * in the user's path.
+ */
+export async function extractProfile(input: {
+  uid: string;
+  text: string;
+  answer: string;
+  knownFacts: Array<{ key: string; value: string }>;
+}): Promise<ProfileDelta | null> {
+  try {
+    const res = await fetchWithTimeout(
+      "/webhook/profile-extract",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+      20_000,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data?.profileDelta;
+    if (!raw || typeof raw !== "object") return null;
+    const delta: ProfileDelta = {};
+    if (typeof raw.displayName === "string" && raw.displayName.trim()) {
+      delta.displayName = raw.displayName.trim();
+    }
+    if (Array.isArray(raw.facts)) {
+      delta.facts = raw.facts
+        .filter((f: any) => f && typeof f.key === "string" && typeof f.value === "string")
+        .map((f: any) => ({ key: f.key, value: f.value }));
+    }
+    return delta.displayName || delta.facts?.length ? delta : null;
+  } catch (err) {
+    console.warn("[profile] extraction failed", err);
+    return null;
+  }
 }
 
 /**

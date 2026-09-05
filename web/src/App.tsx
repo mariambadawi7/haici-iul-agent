@@ -15,7 +15,7 @@ import { useVisitor } from "./hooks/useVisitor";
 import { useSTT } from "./hooks/useSTT";
 import { useTTS } from "./hooks/useTTS";
 import { checkHealth, type HealthState } from "./lib/health";
-import { config, twoStage, type Visitor } from "./lib/api";
+import { config, extractProfile, twoStage, type Visitor } from "./lib/api";
 import { isGeneratedUid } from "./lib/visitorApi";
 import { useTenant } from "./lib/branding/context";
 import type { Emotion, FaceState } from "./types";
@@ -62,7 +62,26 @@ export default function App() {
     // the transcript at it.
     getSessionKey: visitor.sessionKey,
     onMessagesChanged: visitor.saveMessages,
-    onProfileDelta: visitor.applyProfileDelta,
+    // Mine the finished exchange for anything the visitor said about
+    // themselves. Off the critical path by construction: the turn is already
+    // answered and on screen, this is a second request nobody waits for, and
+    // it is dropped entirely when the kiosk does not know who it is talking to
+    // because there would be nowhere to file the result.
+    onTurnComplete: (userText, answer) => {
+      const uid = visitor.uid;
+      if (!uid) return;
+      void extractProfile({
+        uid,
+        text: userText,
+        answer,
+        knownFacts: (visitor.profile?.facts ?? []).map((f) => ({
+          key: f.key,
+          value: f.value,
+        })),
+      }).then((delta) => {
+        if (delta) void visitor.applyProfileDelta(delta);
+      });
+    },
     onAudio: (blob) => {
       tts.playBlob(blob).catch((e) =>
         console.error("[app] TTS playback failed", e),

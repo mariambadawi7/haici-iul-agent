@@ -52,11 +52,12 @@ interface UseChatOpts {
    */
   onMessagesChanged?: (messages: ChatMessage[]) => void;
   /**
-   * Facts the workflow picked out of the turn that just completed, for the
-   * visitor's stored profile. Fires on the rare turn where someone actually
-   * says something about themselves.
+   * A turn completed successfully. Used to mine the exchange for anything the
+   * visitor said about themselves — which is a separate, off-critical-path
+   * request, so this deliberately reports the turn rather than handing over a
+   * delta the chat request was never going to carry.
    */
-  onProfileDelta?: (delta: NonNullable<ChatReply["profileDelta"]>) => void;
+  onTurnComplete?: (userText: string, answer: string) => void;
 }
 
 /**
@@ -83,7 +84,7 @@ export function useChat({
   getVisitor,
   getSessionKey,
   onMessagesChanged,
-  onProfileDelta,
+  onTurnComplete,
 }: UseChatOpts) {
   const [sessions, setSessions] = useState<Session[]>(() => {
     const draft = loadDraft();
@@ -104,7 +105,7 @@ export function useChat({
     getVisitor,
     getSessionKey,
     onMessagesChanged,
-    onProfileDelta,
+    onTurnComplete,
   });
   optsRef.current = {
     wantsAudio,
@@ -112,7 +113,7 @@ export function useChat({
     getVisitor,
     getSessionKey,
     onMessagesChanged,
-    onProfileDelta,
+    onTurnComplete,
   };
 
   // ---- Persistence ----
@@ -386,10 +387,12 @@ export function useChat({
             : undefined,
         });
 
-        // Only on a turn that really worked: an error responder can carry a
-        // half-built body, and a profile is not the place to find out.
-        if (!assistantFailed && reply.profileDelta) {
-          optsRef.current.onProfileDelta?.(reply.profileDelta);
+        // Only on a turn that really worked: an error responder carries a
+        // friendly apology in `answer`, and mining that for facts about the
+        // visitor would file the apology as something they told us.
+        if (!assistantFailed) {
+          const asked = payload.kind === "text" ? payload.text : (reply.question ?? "");
+          if (asked) optsRef.current.onTurnComplete?.(asked, reply.answer);
         }
 
         // Clean up retriability + IndexedDB only on TRUE success.
