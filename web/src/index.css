@@ -140,7 +140,13 @@
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 font-medium tracking-wide transition-all duration-200 ease-out
+    /* Enumerated rather than `transition-all` (see CLAUDE.md): Chrome does not
+       re-resolve a transitioning property when the CSS custom property behind
+       it changes, so a button mid-transition during a tenant swap would keep
+       rendering the previous tenant's colour indefinitely. F-15 now guarantees
+       the freeze in theme.ts always lifts, but this is the actual fix. */
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 font-medium tracking-wide
+      transition-[background-color,border-color,color,box-shadow,opacity] duration-200 ease-out
       focus:outline-none focus:ring-2 focus:ring-brand-400/40 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
@@ -154,11 +160,15 @@
   }
 
   .btn-icon {
-    @apply inline-flex items-center justify-center w-12 h-12 rounded-2xl text-neutral-700 border border-neutral-200/70 hover:border-neutral-300/80 hover:bg-neutral-100 transition-all;
+    /* Only background and border colour actually animate here — enumerate
+       those instead of `transition-all` (see the .btn comment above). */
+    @apply inline-flex items-center justify-center w-12 h-12 rounded-2xl text-neutral-700 border border-neutral-200/70 hover:border-neutral-300/80 hover:bg-neutral-100 transition-[background-color,border-color];
   }
 
   .input {
-    @apply w-full rounded-2xl px-4 py-3 text-neutral-900 bg-neutral-50 border border-neutral-200 placeholder:text-neutral-400 focus:outline-none focus:border-brand-300/60 focus:ring-2 focus:ring-brand-300/20 transition-all;
+    /* Border colour and the focus ring's box-shadow are what change here —
+       enumerate those instead of `transition-all` (see the .btn comment above). */
+    @apply w-full rounded-2xl px-4 py-3 text-neutral-900 bg-neutral-50 border border-neutral-200 placeholder:text-neutral-400 focus:outline-none focus:border-brand-300/60 focus:ring-2 focus:ring-brand-300/20 transition-[border-color,box-shadow];
   }
 
   .chip {
