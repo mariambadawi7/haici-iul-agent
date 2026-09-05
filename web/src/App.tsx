@@ -314,9 +314,13 @@ export default function App() {
       {features.camera && vision.error && (
         <div className="px-4 py-2 text-xs text-warn-700 bg-warn-50 border-b border-warn-200 flex items-center justify-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          {/* Show the underlying reason, not just the symptom. The SDK
+              distinguishes permission-denied, no-such-device and
+              already-in-use, and "already in use by another application" is
+              the difference between a five-second fix and an afternoon. */}
           <span className="leading-snug">
-            The camera could not start, so the kiosk cannot recognise visitors.
-            Tap anywhere to try again.
+            The camera could not start, so the kiosk cannot recognise visitors.{" "}
+            {vision.error.message} Tap anywhere to try again.
           </span>
         </div>
       )}

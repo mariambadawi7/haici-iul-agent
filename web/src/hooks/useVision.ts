@@ -200,7 +200,21 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
     const cam = camRef.current;
     if (!cam) return;
     try {
-      await cam.start({ type: "camera" });
+      // Video ONLY. Two reasons, and the second is a real bug that looked like
+      // a broken camera:
+      //
+      // 1. The vision pipeline needs pixels. The kiosk's microphone belongs to
+      //    the STT path (useSTT), which opens it per recording; holding it open
+      //    here as well is pointless and leaves the browser's mic indicator lit
+      //    the whole time the kiosk is running.
+      //
+      // 2. The SDK defaults a camera source to `audio: true`, and getUserMedia
+      //    is ALL-OR-NOTHING: one call for video+audio rejects entirely if
+      //    either device is unavailable. So any app holding the microphone —
+      //    Discord during a call or a stream is the case we hit — made this
+      //    request fail with NotReadableError, and the symptom was "the camera
+      //    does not work" even though the camera itself was free.
+      await cam.start({ type: "camera", audio: false });
       setPublishing(true);
       setError(null);
     } catch (err: unknown) {
