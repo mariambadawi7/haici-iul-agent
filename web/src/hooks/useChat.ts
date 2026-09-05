@@ -331,10 +331,14 @@ export function useChat({ wantsAudio, onAudio, getVisitor }: UseChatOpts) {
   }, [activeId, sessions, createSession]);
 
   const sendText = useCallback(
-    (text: string) => {
+    (text: string, forceSessionId?: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      const sessionId = ensureActive();
+      // An explicit id lets a caller target a session it just created, before
+      // this hook's own state has caught up with that creation — see the
+      // opening-greeting stale-closure bug this exists for (F-05 in
+      // docs/CODE-REVIEW-FINDINGS.md).
+      const sessionId = forceSessionId ?? ensureActive();
       const id = uid();
       appendMessage(sessionId, {
         id,

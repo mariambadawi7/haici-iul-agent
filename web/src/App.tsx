@@ -197,14 +197,19 @@ export default function App() {
 
   const startConversation = useCallback(
     (name: string | null) => {
-      chat.createSession();
+      // createSession returns the session it just made. The `chat` object
+      // captured by the timeout below is from the PREVIOUS render, so its
+      // ensureActive() would resolve to the old session id — the greeting has
+      // to be addressed to this id explicitly (F-05 in
+      // docs/CODE-REVIEW-FINDINGS.md).
+      const session = chat.createSession();
       setView("chat");
       // The name comes from a face match, which can be wrong. It is phrased as
       // the visitor introducing themselves rather than as an assertion the
       // kiosk makes about them, so a mismatch reads as a misunderstanding the
       // person can correct, not as the machine insisting who they are.
       const greeting = name ? `Hello! I'm ${name}.` : "Hello!";
-      setTimeout(() => chat.sendText(greeting), 120);
+      setTimeout(() => chat.sendText(greeting, session.id), 120);
     },
     [chat],
   );
