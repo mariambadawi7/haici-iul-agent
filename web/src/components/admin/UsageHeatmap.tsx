@@ -11,11 +11,13 @@ const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function intensity(count: number, max: number): string {
-  if (count === 0) return "rgba(148, 163, 184, 0.08)";
+  // The theme writes its ramps as space-separated RGB triplets precisely so
+  // they can carry a runtime alpha. Hardcoding IUL's teal here (as this used
+  // to) would leave this one panel on IUL's brand for every other tenant.
+  if (count === 0) return "rgb(var(--neutral-400) / 0.08)";
   const t = max > 0 ? count / max : 0;
-  // Interpolate from a pale to a deep teal.
   const alpha = 0.15 + t * 0.75;
-  return `rgba(15, 118, 110, ${alpha.toFixed(2)})`;
+  return `rgb(var(--brand-600) / ${alpha.toFixed(2)})`;
 }
 
 export default function UsageHeatmap({ cells, loading }: Props) {
