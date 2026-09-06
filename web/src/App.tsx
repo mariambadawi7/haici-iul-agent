@@ -483,12 +483,18 @@ export default function App() {
           
           {/* RIGHT: Robot Command Center */}
           {features.avatar && avatarKind !== "none" && (
-          <div className="relative shrink-0 lg:w-[22rem] flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 transition-all">
+          <div className="relative shrink-0 lg:w-[22rem] flex flex-col items-center justify-center bg-slate-50/50 border-b lg:border-b-0 lg:border-l border-slate-200/80 p-6 lg:px-5 lg:py-5 transition-all">
 
              {/* The assistant — the rigged 2D mascot, an animated 3D head, or
                  a still image for tenants who supplied flat artwork. All three
                  read the same face state and speech amplitude. */}
-             <div className="h-52 lg:h-80 w-full flex items-center justify-center">
+             {/* The mascot is bounded by height, so it takes the column's
+                 leftover vertical room rather than a fixed height. `min-h-0`
+                 is what keeps it honest: without it the box refuses to shrink
+                 below its content on a short window and the head is clipped by
+                 the panel. The max keeps the derived width inside the column,
+                 since constraining a second axis would stretch the artwork. */}
+             <div className="h-60 lg:h-auto lg:flex-1 lg:min-h-0 lg:max-h-[30rem] w-full flex items-center justify-center">
                 {avatarKind === "mascot" ? (
                   <Mascot2D
                     state={faceState}
@@ -521,7 +527,7 @@ export default function App() {
              </div>
              
              {/* Beautiful Status Card */}
-             <div className="mt-4 lg:mt-8 bg-surface border border-slate-200 shadow-sm rounded-2xl p-4 w-full text-center hidden lg:block">
+             <div className="mt-4 shrink-0 bg-surface border border-slate-200 shadow-sm rounded-2xl px-4 py-3 w-full text-center hidden lg:block">
                <h3 className="font-serif font-semibold text-slate-800 text-lg">{identity.name}</h3>
                <div className="mt-2 flex items-center justify-center gap-2">
                  <span className="relative flex h-2.5 w-2.5">
@@ -537,7 +543,7 @@ export default function App() {
              </div>
              
              {/* Tiny Mobile Status Pill */}
-             <div className="mt-2 bg-surface border border-slate-200 shadow-sm rounded-full px-4 py-1.5 flex items-center justify-center gap-2 lg:hidden">
+             <div className="mt-2 shrink-0 bg-surface border border-slate-200 shadow-sm rounded-full px-4 py-1.5 flex items-center justify-center gap-2 lg:hidden">
                <span className={`relative inline-flex rounded-full h-2 w-2 ${faceState === 'idle' ? 'bg-slate-300' : 'bg-teal-500'}`}></span>
                <span className="badge-serif tracking-widest text-[10px] text-slate-500">
                  {STATE_LABEL[faceState]}
