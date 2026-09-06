@@ -453,6 +453,56 @@ async function listVisitorSummaries(req: Request): Promise<Response> {
 }
 
 /**
+ * How long after enrollment a visitor may still undo it themselves.
+ *
+ * Bounds the unauthenticated route below to the conversation that created the
+ * record. Generous enough for a long conversation, far short of "any record
+ * that happens to be a generated uid".
+ */
+const UNDO_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * "Don't recognise me" — the visitor undoes an enrollment nobody asked them
+ * about.
+ *
+ * Unlike every other destructive route here this one takes NO operator
+ * passcode, and it cannot: the person standing at the kiosk does not have one,
+ * and a control they cannot reach is not a control. What keeps that safe is
+ * that it can only ever delete what the kiosk itself just created —
+ *
+ *   - a generated uid, never a `Mariam_Badawi` a member of staff curated;
+ *   - a record created inside UNDO_WINDOW_MS, so it is this session's;
+ *   - a record with no completed visit behind it, so no returning visitor's
+ *     history can be destroyed by a tap.
+ *
+ * Anything outside that is refused and stays a staff decision. The route is
+ * also inside the loopback-gated block, so only the Vite proxy reaches it.
+ */
+async function undoEnrollment(uid: string): Promise<Response> {
+  if (!isValidUid(uid) || !/^v[0-9a-f]{10}$/.test(uid)) {
+    return json({ error: "Not a kiosk-enrolled visitor." }, 403);
+  }
+  const record = await readRecord(uid);
+  // Already gone is the outcome the caller wanted; saying so would only make
+  // the kiosk apologise for something that is not a problem.
+  if (!record) return json({ ok: true });
+
+  if (Date.now() - record.createdAt > UNDO_WINDOW_MS || record.visits > 1) {
+    console.warn(`[visitors] refused a self-undo for ${uid}; not a fresh enrollment`);
+    return json({ error: "This record is no longer self-removable." }, 403);
+  }
+
+  try {
+    await forgetVisitor(uid);
+  } catch (err) {
+    console.error(`[visitors] self-undo failed for ${uid}`, err);
+    return json({ error: "Could not remove the enrollment." }, 500);
+  }
+  console.log(`[visitors] ${uid} undid their own enrollment (record and face)`);
+  return json({ ok: true });
+}
+
+/**
  * Forget a visitor: transcript, profile and face. Operator only, and the one
  * route that must keep working — it is how a person who asks to be removed
  * actually gets removed.
@@ -508,6 +558,13 @@ const server = Bun.serve<WsData>({
       if (rest === "enroll") {
         if (req.method === "POST") return enrollVisitor(req);
         return json({ error: "Method not allowed." }, 405);
+      }
+
+      // Checked before the bare-uid routes for the same reason `enroll` is:
+      // `rest` still holds the trailing segment at this point.
+      if (rest.endsWith("/undo-enrollment")) {
+        if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
+        return undoEnrollment(rest.slice(0, -"/undo-enrollment".length));
       }
 
       if (req.method === "GET") return readVisitor(rest);

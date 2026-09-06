@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   enrollFace,
+  isGeneratedUid,
   loadVisitor,
   saveVisitor,
+  undoEnrollment,
   type VisitorRecord,
 } from "../lib/visitorApi";
 import type { ProfileDelta } from "../lib/api";
@@ -73,8 +75,19 @@ const EXTRA_SAMPLE_INTERVAL_MS = 9_000;
 /** Matches MAX_SAMPLES in web/visitor-store.ts; the server enforces it too. */
 const MAX_SAMPLES = 5;
 
+/**
+ * What became of the face data when the visitor declined recognition.
+ *
+ * The panel that offers the control stays open afterwards as a receipt, so it
+ * has to be able to say which of these actually happened rather than assert
+ * the happy one. `kept` is the honest awkward case: someone the kiosk knew
+ * from an earlier visit, whose stored record is not a tap away from deletion.
+ */
+export type UndoStatus = "none" | "pending" | "removed" | "failed" | "kept";
+
 export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions) {
   const [status, setStatus] = useState<VisitorStatus>("idle");
+  const [undoStatus, setUndoStatus] = useState<UndoStatus>("none");
   const [record, setRecord] = useState<VisitorRecord | null>(null);
 
   /** The bound uid. A ref as well as state: send-time reads must not lag. */
@@ -87,6 +100,13 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
   const pendingMessagesRef = useRef<ChatMessage[] | null>(null);
   /** Set once per conversation, so `visits` counts conversations not turns. */
   const visitCountedRef = useRef(false);
+  /**
+   * True when THIS conversation is what put the bound face in the gallery.
+   *
+   * The difference between undoing something the kiosk did unasked and
+   * deleting a returning visitor's history, which is a staff decision.
+   */
+  const enrolledHereRef = useRef(false);
 
   /**
    * Callers waiting on `awaitBinding`. Resolved with the uid the moment one
@@ -105,6 +125,7 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
       uidRef.current = uid;
       samplesRef.current = samples;
       lastSampleAtRef.current = Date.now();
+      enrolledHereRef.current = enrolledNow;
 
       const loaded = await loadVisitor(uid);
       // A record that will not load is not a reason to refuse the binding: the
@@ -313,9 +334,11 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
     bindingRef.current = false;
     samplesRef.current = 0;
     visitCountedRef.current = false;
+    enrolledHereRef.current = false;
     pendingMessagesRef.current = null;
     setRecord(null);
     setStatus(enabled ? "resolving" : "idle");
+    setUndoStatus("none");
     // Anyone still waiting gets null rather than hanging until their timeout.
     settleWaiters(null);
   }, [enabled, settleWaiters]);
@@ -335,6 +358,68 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
     console.info("[visitor] identity disowned by the visitor; running anonymously");
   }, [release]);
 
+  /**
+   * "Don't recognise me" — the visitor declines being identified at all.
+   *
+   * Three things separate this from `disown()`, which answers a different
+   * question ("you have the wrong person"):
+   *
+   * NOTHING IS WRITTEN. `release()` flushes the pending transcript on its way
+   * out, which is right for a walk-away and exactly wrong here: the request is
+   * to not be on file, so the debounced write is dropped rather than flushed.
+   *
+   * THE ENROLLMENT IS UNDONE. If this conversation is what put the face in the
+   * gallery, that photo and record go. Otherwise the kiosk would keep a
+   * reference photo of someone who just said no, and recognise them on sight
+   * next week — the button would have meant nothing beyond this session.
+   * A face this kiosk did NOT enroll is left alone; deleting a record with
+   * history behind it stays a staff decision, which is what the notice says.
+   *
+   * IT STAYS OFF. Like `disown`, `anonymous` holds for the rest of the
+   * conversation; the camera still sees the same face and would re-bind within
+   * a second of being let go.
+   */
+  const refuseRecognition = useCallback(() => {
+    const uid = uidRef.current;
+    const undoable = enrolledHereRef.current && isGeneratedUid(uid);
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    pendingMessagesRef.current = null;
+
+    uidRef.current = null;
+    samplesRef.current = 0;
+    visitCountedRef.current = false;
+    enrolledHereRef.current = false;
+    setRecord(null);
+    // Set before the await, and `bindingRef` with it: the binder effect runs on
+    // the very next confirmed frame, and a request not to be recognised that
+    // takes a network round-trip to take effect is not one.
+    bindingRef.current = true;
+    setStatus("anonymous");
+    settleWaiters(null);
+
+    if (undoable && uid) {
+      setUndoStatus("pending");
+      void undoEnrollment(uid).then((ok) => {
+        setUndoStatus(ok ? "removed" : "failed");
+        console.info(
+          ok
+            ? `[visitor] ${uid} declined recognition; enrollment removed`
+            : `[visitor] ${uid} declined recognition, but the enrollment could not be removed`,
+        );
+      });
+    } else {
+      // Bound to a face this kiosk did not enroll just now — a returning
+      // visitor, or one a member of staff added. Recognition stops, but their
+      // stored record is not this button's to delete.
+      setUndoStatus(uid ? "kept" : "none");
+      console.info("[visitor] recognition declined; running anonymously");
+    }
+  }, [settleWaiters]);
+
   useEffect(
     () => () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -346,6 +431,7 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
 
   return {
     status,
+    undoStatus,
     uid: uidRef.current,
     record,
     profile,
@@ -361,5 +447,6 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
     applyProfileDelta,
     release,
     disown,
+    refuseRecognition,
   };
 }

@@ -153,6 +153,21 @@ export async function listVisitors(passcode: string): Promise<VisitorSummary[] |
   }
 }
 
+/**
+ * "Don't recognise me" — undo an enrollment the kiosk made without asking.
+ *
+ * No passcode, because the person tapping it is a visitor, not an operator.
+ * The server refuses anything that is not a fresh, kiosk-minted record (see
+ * undoEnrollment in web/ws-server.ts), so this cannot reach a staff-curated
+ * face or a returning visitor's history.
+ */
+export async function undoEnrollment(uid: string): Promise<boolean> {
+  const res = await call(`${BASE}/${encodeURIComponent(uid)}/undo-enrollment`, {
+    method: "POST",
+  });
+  return !!res?.ok;
+}
+
 /** Operator only. Deletes the transcript, the profile AND the enrolled face. */
 export async function forgetVisitor(uid: string, passcode: string): Promise<boolean> {
   const res = await call(`${BASE}/${encodeURIComponent(uid)}`, {

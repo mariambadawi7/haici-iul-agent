@@ -5,6 +5,7 @@ import MessageInput from "./components/MessageInput";
 import LandingPage from "./components/LandingPage";
 import BrandStrip, { BrandFooter } from "./components/BrandStrip";
 import HealthBanner from "./components/HealthBanner";
+import CameraNotice from "./components/CameraNotice";
 import Avatar3D from "./components/Avatar3D";
 import Mascot2D from "./components/Mascot2D";
 import { useChat } from "./hooks/useChat";
@@ -391,6 +392,28 @@ export default function App() {
     chat.createSession();
   }, [chat, tts, visitor]);
 
+  /**
+   * "Don't recognise me" — the visitor declines being identified at all.
+   *
+   * Whether the transcript on screen survives depends on where it came from,
+   * and the two cases pull opposite ways. A conversation hydrated from a
+   * stored record is on screen BECAUSE the camera recognised a face, so it
+   * goes when that premise is withdrawn. A conversation this person has been
+   * having for the last two minutes is theirs, they are still standing here,
+   * and wiping it buys no privacy — it only makes the button feel like a
+   * punishment for pressing it.
+   */
+  const handleDontRecogniseMe = useCallback(() => {
+    const hydrated = (visitor.history?.length ?? 0) > 0;
+    visitor.refuseRecognition();
+    hydratedForRef.current = null;
+    if (hydrated) {
+      tts.stop();
+      chat.cancelInFlight();
+      chat.createSession();
+    }
+  }, [chat, tts, visitor]);
+
   // The landing tap is also the gesture that lets the camera start, if the
   // tenant has vision on — getUserMedia refuses outside one. useVision picks
   // that up from the pointerdown itself, so nothing extra is needed here.
@@ -411,6 +434,20 @@ export default function App() {
         className="z-10"
         actions={
           <>
+            {/* Nobody is asked before their face is enrolled, so the least the
+                kiosk owes the person standing at it is to say the camera is
+                running and what that means. Gated on `publishing` rather than
+                `features.camera`: a configured camera that never started is
+                one the failure banner below is already talking about, and a
+                badge claiming otherwise would contradict it. */}
+            {features.camera && vision.publishing && (
+              <CameraNotice
+                refused={visitor.status === "anonymous"}
+                undoStatus={visitor.undoStatus}
+                onRefuse={handleDontRecogniseMe}
+              />
+            )}
+
             {/* The escape hatch for a wrong face match. With the conversation
                 list gone this is the ONLY way a misrecognised visitor can get
                 out of someone else's transcript, so it is on screen whenever
