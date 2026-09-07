@@ -343,20 +343,7 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
     settleWaiters(null);
   }, [enabled, settleWaiters]);
 
-  /**
-   * "Not you?" — the visitor says the kiosk has the wrong person.
-   *
-   * Deliberately different from `release()`: releasing would re-bind to the
-   * same face within a second, since the camera still sees it and still
-   * believes it. This goes to `anonymous` and STAYS there, so the rest of the
-   * conversation runs unbound. The next wake starts the binder fresh.
-   */
-  const disown = useCallback(() => {
-    release();
-    bindingRef.current = true;
-    setStatus("anonymous");
-    console.info("[visitor] identity disowned by the visitor; running anonymously");
-  }, [release]);
+  // `disown` is defined below `refuseRecognition`, which it delegates to.
 
   /**
    * "Don't recognise me" — the visitor declines being identified at all.
@@ -419,6 +406,34 @@ export function useVisitor({ enabled, identity, captureFace }: UseVisitorOptions
       console.info("[visitor] recognition declined; running anonymously");
     }
   }, [settleWaiters]);
+
+  /**
+   * "Not you?" — the visitor says the kiosk has matched the wrong person.
+   *
+   * A different question from `refuseRecognition` ("do not recognise me at
+   * all") with identical mechanics, so it delegates rather than keeping a
+   * second copy. Two implementations of this would drift, and both of them
+   * handle the case where the kiosk being wrong is a privacy event — the same
+   * argument that collapsed the cache key's two authors into one.
+   *
+   * What must NOT happen is the flush `release()` performs on its way out.
+   * That is correct for a walk-away and exactly backwards here: the transcript
+   * on screen is the misidentified person's stored history PLUS this visitor's
+   * turns, so writing it back files a stranger's conversation under someone
+   * else's face and bumps their visit count. The only people who ever press
+   * this button are the ones that would happen to.
+   *
+   * Delegating also covers the case this used to miss. A face the kiosk
+   * enrolled during THIS conversation is one it created unasked, so "not me"
+   * has to remove it; leaving it behind means the person is silently on file
+   * and recognised on sight next week, having explicitly said no. A face the
+   * kiosk did not enroll is left alone — deleting a returning visitor's record
+   * is a staff decision, not this button's.
+   */
+  const disown = useCallback(() => {
+    refuseRecognition();
+    console.info("[visitor] identity disowned by the visitor; running anonymously");
+  }, [refuseRecognition]);
 
   useEffect(
     () => () => {
