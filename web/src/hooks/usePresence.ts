@@ -141,12 +141,23 @@ export function usePresence({
    * a second trigger arriving during the wait cannot queue a second wake.
    */
   const commitWake = useCallback(
-    (source: WakeSource) => {
-      // Belt-and-braces: a conversation already in progress should never be
-      // re-wiped by a second wake. The cooldown-refresh effect below is the
-      // primary fix for the stale-cooldown bug, but this guard holds even if
-      // some future caller invokes commitWake directly while `awake` is true.
-      if (awakeRef.current) return;
+    (source: WakeSource, force = false) => {
+      // A conversation already in progress should never be re-wiped by a
+      // second SENSOR wake -- two triggers noticing the same person is the
+      // normal case, not a second visitor.
+      //
+      // Two things are deliberately exempt. `force` is an explicit request (a
+      // button), which is obeyed whatever the kiosk thinks its state is; it is
+      // also the only recovery a person standing at the screen has.
+      //
+      // And the latch is only honoured while the camera is live, because only
+      // a departure clears it (see the departure effect below) and only the
+      // camera can see one. Trusting it without a camera latched it true on
+      // the first wake and silenced every trigger for the rest of the page's
+      // life -- the exact opposite of the "sensor covers the camera" rule this
+      // hook exists to implement. With no camera the cooldown is the throttle,
+      // which is what the kiosk used before fusion existed.
+      if (!force && awakeRef.current && visionRef.current.live) return;
       clearVeto();
       lastWakeRef.current = Date.now();
       awakeRef.current = true;
@@ -263,7 +274,7 @@ export function usePresence({
    * that tap is also what starts the camera, so no frame has been seen yet.
    */
   const wake = useCallback(
-    (source: WakeSource = "button") => commitWake(source),
+    (source: WakeSource = "button") => commitWake(source, true),
     [commitWake],
   );
 
