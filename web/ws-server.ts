@@ -573,17 +573,17 @@ const server = Bun.serve<WsData>({
       return json({ error: "Method not allowed." }, 405);
     }
 
-    // A non-browser client (the ESP32) sends no Origin header at all; a
-    // browser always does. Reject only origins that are present and not
-    // allowed, so hardware upgrades (checked next) are unaffected.
-    const origin = req.headers.get("origin");
-    if (origin !== null && !ALLOWED_WS_ORIGINS.has(origin)) {
-      console.warn(`[ws] rejected upgrade from origin ${origin}`);
-      return new Response("Forbidden", { status: 403 });
-    }
-
     const clientType = (url.searchParams.get("client") ?? "browser") as ClientType;
 
+    // The two roles are authenticated by different things, so the checks are
+    // not interchangeable. Hardware proves itself with the shared secret;
+    // browsers, which cannot hold a secret, are gated on Origin.
+    //
+    // The hardware check MUST come first and the Origin gate must not apply to
+    // it: links2004/WebSockets (Hardware/platformio.ini) hardcodes
+    // `Origin: file://` into its client handshake, so the ESP32 does send an
+    // Origin — just never an allowed one. Gating hardware on it rejected every
+    // connection the firmware ever made, five seconds apart, forever.
     if (clientType === "hardware") {
       if (!HARDWARE_TOKEN) {
         console.error("[ws] HARDWARE_TOKEN is not set; refusing hardware connections");
@@ -591,6 +591,15 @@ const server = Bun.serve<WsData>({
       }
       if (url.searchParams.get("token") !== HARDWARE_TOKEN) {
         console.warn("[ws] rejected hardware upgrade with a bad or missing token");
+        return new Response("Forbidden", { status: 403 });
+      }
+    } else {
+      // A browser always sends an Origin. A null one here means a non-browser
+      // client asked for the browser role, which has no secret to check, so
+      // refuse it rather than let it in unauthenticated.
+      const origin = req.headers.get("origin");
+      if (origin === null || !ALLOWED_WS_ORIGINS.has(origin)) {
+        console.warn(`[ws] rejected upgrade from origin ${origin ?? "(none)"}`);
         return new Response("Forbidden", { status: 403 });
       }
     }

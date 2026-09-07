@@ -129,9 +129,18 @@ ESP32                         ws-server.ts (Bun) :3001            Browser tab
 4. Fill in:
    - **WiFi network** — pick it from the **dropdown** (the ESP scans live; tap *Rescan* to refresh). 🔒 marks password-protected networks and the dBm value shows signal strength. For a hidden SSID, type it in the *manual* field instead (manual overrides the dropdown).
    - WiFi password
-   - The IP address of the machine running Docker (run `hostname -I` on it)
+   - The IP address of the machine running Docker (run `hostname -I` on it,
+     or `ipconfig` on Windows — use the Wi-Fi adapter's IPv4 address, not a
+     VMware/WSL/Hyper-V virtual one)
    - Port: `3001`
-   - Path: `/ws?client=hardware`
+   - Path: `/ws?client=hardware&token=<HARDWARE_TOKEN>`
+
+   **The `token=` is not optional.** The relay authenticates the hardware role
+   with the shared secret in `HARDWARE_TOKEN` (see `docker-compose.yml`), and it
+   fails closed: no token, or the wrong one, and the upgrade is refused with a
+   403. The symptom is a **solid Blue LED forever** — WiFi is up, the relay is
+   reachable, and every handshake is rejected. Copy the value out of `.env` on
+   the Docker host and paste it verbatim.
 5. Submit → ESP32 saves to NVS and reboots.
 6. After reboot: Red LED (connecting) → Blue LED (WiFi up, finding WS) → **Green LED** (all good).
 
@@ -169,6 +178,19 @@ credential or SMS login. Here is exactly what the firmware does:
    works even on an un-signed-in captive network**. The chatbot's own internet
    needs (LLM, etc.) are handled server-side on your Docker host, which you sign
    in once.
+
+### Blue LED that never turns green
+
+Solid Blue means WiFi is up but the WebSocket never completed. Check the relay's
+own log first — `docker compose logs -f web` — because it says which gate the
+handshake failed:
+
+| Log line | Cause | Fix |
+|---|---|---|
+| `rejected hardware upgrade with a bad or missing token` | The WS path has no `token=`, or the wrong one | Re-enter config (hold Red 2 s) and set the path to `/ws?client=hardware&token=<HARDWARE_TOKEN>` |
+| `HARDWARE_TOKEN is not set; refusing hardware connections` | The relay has no secret to check against | Set `HARDWARE_TOKEN` in `.env`, then `docker compose up -d web` |
+| `rejected upgrade from origin file://` | An old relay build gating hardware on Origin | Fixed in `ws-server.ts`: the ESP's WebSocket library hardcodes `Origin: file://`, so the hardware role is gated on its token instead. Restart `web`. |
+| *nothing at all* | The ESP never reached the host | Wrong IP, port 3001 blocked by the host firewall, or client isolation on the AP |
 
 **LED hint:** if a captive portal is detected and the WebSocket isn't connected
 yet, the Blue LED **blinks** (instead of solid). Solid Blue = WiFi OK but relay

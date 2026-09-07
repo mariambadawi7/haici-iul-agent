@@ -333,6 +333,10 @@ static void handleAPSave() {
   // Manual entry (hidden networks) overrides the dropdown selection.
   String ssid  = apServer.arg("ssid_manual");
   if (ssid.isEmpty()) ssid = apServer.arg("ssid");
+  // Both blank means the form was submitted before the scan populated the
+  // dropdown. Keep the working network rather than saving an empty SSID --
+  // that wipes the WiFi config and strands the board in AP mode on reboot.
+  if (ssid.isEmpty()) ssid = cfg.wifiSsid;
   String pass  = apServer.arg("pass");
   if (pass.isEmpty()) pass = cfg.wifiPass;   // keep existing password if blank
 
