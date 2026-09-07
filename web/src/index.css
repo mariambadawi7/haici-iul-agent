@@ -188,10 +188,17 @@
     );
   }
 
+  /* No `overflow: hidden` here, deliberately. It was added with the original
+     strip to contain the ::after wash below, which it never needed to: that
+     pseudo-element is `position: absolute; inset: 0`, so the padding box
+     already bounds it. What the clip DID reach was CameraNotice's popover,
+     which hangs below the badge in the right-hand actions — leaving the
+     visitor the heading "The camera is on" and cutting off both the
+     explanation and the control to decline. The strip is the header of a
+     kiosk; anything anchored to it opens downward, over the content. */
   .brand-strip {
     @apply px-5 py-5 md:px-7 md:py-6;
     position: relative;
-    overflow: hidden;
   }
 
   .brand-strip::after {
