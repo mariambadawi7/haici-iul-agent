@@ -383,6 +383,14 @@ export default function App() {
    * goes: the transcript is cleared and the conversation restarts unbound.
    * `disown` (rather than `release`) is what keeps it unbound — the camera can
    * still see the same face and would otherwise re-bind to it within a second.
+   * It also DISCARDS the pending transcript rather than flushing it, so this
+   * visitor's turns are not filed under the face they just disowned, and it
+   * removes the enrollment when this conversation is what created it.
+   *
+   * Nothing here rescans. That is the point: the camera still sees the same
+   * face at the same confidence, so re-evaluating would land on the same wrong
+   * identity within a second and the control would read as broken. Binding
+   * resumes on the next wake, when `onDepart` releases the lock.
    */
   const handleNotMe = useCallback(() => {
     tts.stop();
