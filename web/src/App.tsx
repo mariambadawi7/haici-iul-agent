@@ -323,8 +323,16 @@ export default function App() {
       // label is a usable name only when a person chose it -- an auto-enrolled
       // uid like `v7f3a9c1b2d` is not one, and greeting someone with it is far
       // worse than not greeting them by name at all.
+      // `name` needs the SAME guard, not just `uid`: it is the wake event's
+      // camera identity, which is the gallery label verbatim, and a gallery
+      // label is a minted uid for anyone the kiosk enrolled itself. Guarding
+      // only `uid` let an auto-enrolled visitor be greeted "Hello! I'm
+      // v9412633395." whenever the camera had confirmed them but binding had
+      // not resolved -- exactly what the comment above says not to do.
       const known =
-        visitor.displayName ?? (uid && !isGeneratedUid(uid) ? uid : null) ?? name;
+        visitor.displayName ??
+        (uid && !isGeneratedUid(uid) ? uid : null) ??
+        (isGeneratedUid(name) ? null : name);
 
       // The name comes from a face match, which can be wrong. It is phrased as
       // the visitor introducing themselves rather than as an assertion the
