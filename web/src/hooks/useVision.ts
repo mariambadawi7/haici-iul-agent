@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OpenCam } from "@opencam/client";
 import type { Box, FrameSize } from "@opencam/client";
-import { cropFace } from "../lib/faceCrop";
+import { cropFace, faceSizeInVideoPixels, MIN_FACE_PX } from "../lib/faceCrop";
+import {
+  freshDiagWindow,
+  noteCropRejection,
+  noteFacePx,
+  reportBindingDiagnostic,
+  MIN_FRAMES_TO_REPORT,
+  REPORT_INTERVAL_MS,
+} from "../lib/bindingDiag";
 import type { VisionSignal } from "./usePresence";
 import type { Emotion } from "../types";
 
@@ -241,6 +249,14 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
   });
   /** Consecutive frames showing a face that resolved to nobody. */
   const strangerRunRef = useRef(0);
+  /**
+   * Counters explaining why the two runs above are not completing.
+   *
+   * Written every frame and read only by the reporting timer, so it is a ref:
+   * a re-render per frame to display nothing would cost more than the
+   * diagnostic is worth.
+   */
+  const diagRef = useRef(freshDiagWindow());
   const identityRef = useRef<ConfirmedIdentity>(null);
   /** Nearest face geometry from the last frame, for cropping. */
   const faceRef = useRef<{ box: Box; frame: FrameSize } | null>(null);
@@ -292,6 +308,7 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
       run.name = matched;
 
       const seesFace = people.some((p) => p.has_face);
+      const strangerRunBefore = strangerRunRef.current;
       strangerRunRef.current = seesFace && !matched ? strangerRunRef.current + 1 : 0;
 
       let confirmed: ConfirmedIdentity = identityRef.current;
@@ -313,6 +330,37 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
       if (changed) {
         identityRef.current = confirmed;
         setIdentity(confirmed);
+      }
+
+      // Evidence for why an unresolved face stays unresolved. A handful of
+      // counter updates per frame, and none at all once a name is confirmed —
+      // see lib/bindingDiag.ts for what the shapes of this mean.
+      if (typeof confirmed === "string") {
+        // Recognised. Nothing to explain, so the window starts over rather
+        // than surviving to report a success as a failure later.
+        diagRef.current = freshDiagWindow();
+      } else {
+        const diag = diagRef.current;
+        diag.frames += 1;
+        if (seesFace) diag.framesWithFace += 1;
+        diag.bestStrangerRun = Math.max(diag.bestStrangerRun, strangerRunRef.current);
+        if (strangerRunBefore > 0 && strangerRunRef.current === 0) {
+          // Which of the two things broke the run is the whole question: a
+          // match means the gallery is half-recognising this person, no match
+          // means the detector lost their face between frames.
+          if (matched) diag.resetsMatched += 1;
+          else diag.resetsNoFace += 1;
+        }
+        const similarity = nearest?.similarity ?? 0;
+        if (named && !matched && similarity > (diag.weakMatch?.similarity ?? 0)) {
+          diag.weakMatch = { name: named, similarity };
+        }
+        const facePx = faceSizeInVideoPixels(
+          videoRef.current,
+          nearest?.face_box as Box | undefined,
+          snapshot.frame,
+        );
+        if (facePx !== null) noteFacePx(diag, facePx);
       }
 
       // Smoothed, not raw: see EMOTION_WINDOW_MS above for why.
@@ -352,6 +400,7 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
       setEmotion(null);
       identityRunRef.current = { name: null, frames: 0 };
       strangerRunRef.current = 0;
+      diagRef.current = freshDiagWindow();
       faceRef.current = null;
       identityRef.current = null;
       setIdentity(null);
@@ -375,6 +424,35 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
           faceRef.current = null;
           setIdentity(null);
         }
+      }
+
+      // Report on the same tick. Nothing downstream ever asks for this — a
+      // conversation that never binds simply proceeds — so the timer is the
+      // only thing that can raise it.
+      //
+      // Two situations qualify, and the second is why this is not simply "no
+      // identity yet": a confirmed stranger whose every crop is refused has an
+      // identity as far as this hook is concerned, and is exactly the case
+      // worth hearing about. A stranger who enrolls normally satisfies
+      // neither — the backend rebuilds its gallery within about five seconds
+      // and starts returning the new uid, which resolves the verdict to a
+      // name and clears the window — so a working kiosk stays silent.
+      const diag = diagRef.current;
+      const undecided = identityRef.current === null;
+      const enrollmentRefused = Object.keys(diag.cropRejections).length > 0;
+      if (
+        Date.now() - diag.startedAt >= REPORT_INTERVAL_MS &&
+        ((undecided && diag.framesWithFace >= MIN_FRAMES_TO_REPORT) || enrollmentRefused)
+      ) {
+        const { startedAt, ...counters } = diag;
+        reportBindingDiagnostic({
+          ...counters,
+          unresolvedMs: Date.now() - startedAt,
+          needStrangerFrames: STRANGER_MIN_FRAMES,
+          needSimilarity: IDENTITY_MIN_SIMILARITY,
+          minFacePx: MIN_FACE_PX,
+        });
+        diagRef.current = freshDiagWindow();
       }
     }, 1_000);
     return () => clearInterval(timer);
@@ -458,11 +536,23 @@ export function useVision({ enabled, sessionId = "kiosk" }: UseVisionOptions) {
   const captureFace = useCallback(async (): Promise<Blob | null> => {
     const video = videoRef.current;
     const face = faceRef.current;
-    if (!video || !face) return null;
+    if (!video || !face) {
+      // Never reaches cropFace, and it is a distinct failure: the capture
+      // element or the last frame's geometry is missing, not the face.
+      noteCropRejection(diagRef.current, "no-frame-geometry", null);
+      return null;
+    }
     try {
-      return await cropFace({ video, box: face.box, frame: face.frame });
+      return await cropFace({
+        video,
+        box: face.box,
+        frame: face.frame,
+        onReject: ({ reason, facePx }) =>
+          noteCropRejection(diagRef.current, reason, facePx),
+      });
     } catch (err) {
       console.warn("[vision] face capture failed", err);
+      noteCropRejection(diagRef.current, "threw", null);
       return null;
     }
   }, []);

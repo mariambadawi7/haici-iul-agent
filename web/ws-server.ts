@@ -343,6 +343,84 @@ function requireLoopback(
 }
 
 /**
+ * Why a conversation never bound to a face.
+ *
+ * The kiosk reports this itself, because nothing else can: a visitor who is
+ * never recognised and never enrolled produces no enrollment, no record and no
+ * log line, so from here an unbound six-minute conversation and an empty lobby
+ * look identical. See web/src/lib/bindingDiag.ts for how to read the numbers.
+ *
+ * Ungated like enroll, and for the same reason — the kiosk calls it unattended
+ * — with the loopback check above as the boundary. Everything in the body is
+ * treated as untrusted anyway: it is formatted into a log line, and a log line
+ * is a place where an unsanitised string is a real problem.
+ */
+async function logBindingDiagnostic(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return json({ error: "Expected a JSON body." }, 400);
+  }
+  const d = body as Record<string, unknown>;
+
+  // Bounded, finite, and rounded: these are counters from a browser, and a
+  // NaN or an exponent in the middle of a log line makes it unreadable.
+  const num = (v: unknown, max = 1e9): number => {
+    const n = typeof v === "number" && Number.isFinite(v) ? v : 0;
+    return Math.round(Math.max(0, Math.min(max, n)));
+  };
+  /** One line, printable ASCII only. Newlines here would forge log entries. */
+  const clean = (v: unknown, max = 64): string =>
+    String(v ?? "")
+      .replace(/[^ -~]/g, "?")
+      .slice(0, max);
+
+  const parts: string[] = [
+    `${num(d.frames)} frames (${num(d.framesWithFace)} with a face)`,
+    `best stranger run ${num(d.bestStrangerRun)}/${num(d.needStrangerFrames)}`,
+  ];
+
+  const resets: string[] = [];
+  const lost = num(d.resetsNoFace);
+  const matched = num(d.resetsMatched);
+  if (lost) resets.push(`${lost}x lost detection`);
+  if (matched) resets.push(`${matched}x a confident match`);
+  if (resets.length) parts.push(`run reset by ${resets.join(" and ")}`);
+
+  const weak = d.weakMatch as { name?: unknown; similarity?: unknown } | null;
+  if (weak && typeof weak === "object") {
+    const sim = typeof weak.similarity === "number" ? weak.similarity : 0;
+    parts.push(
+      `best sub-threshold match ${clean(weak.name)} at ${sim.toFixed(3)} (needs ${
+        typeof d.needSimilarity === "number" ? d.needSimilarity : "?"
+      })`,
+    );
+  }
+
+  const largest = d.largestFacePx;
+  if (typeof largest === "number") {
+    parts.push(
+      `face ${num(d.smallestFacePx)}-${num(largest)}px (crop needs ${num(d.minFacePx)})`,
+    );
+  }
+
+  const rejections = Object.entries(
+    (d.cropRejections ?? {}) as Record<string, unknown>,
+  ).slice(0, 8);
+  parts.push(
+    rejections.length
+      ? `crops refused: ${rejections
+          .map(([reason, count]) => `${clean(reason, 32)} x${num(count)}`)
+          .join(", ")}`
+      : "no crop attempted",
+  );
+
+  console.warn(
+    `[visitors] face unresolved for ${Math.round(num(d.unresolvedMs) / 1000)}s: ${parts.join("; ")}`,
+  );
+  return json({ ok: true });
+}
+
+/**
  * Enroll a face, or add another reference photo to one already enrolled.
  *
  * Deliberately NOT operator-gated: the kiosk itself calls this, unattended,
@@ -557,6 +635,13 @@ const server = Bun.serve<WsData>({
       // a request for the visitor whose uid is literally "enroll".
       if (rest === "enroll") {
         if (req.method === "POST") return enrollVisitor(req);
+        return json({ error: "Method not allowed." }, 405);
+      }
+
+      // Same reason as `enroll`: ahead of the uid routes, or this reads as a
+      // request for the visitor whose uid is literally "diag".
+      if (rest === "diag") {
+        if (req.method === "POST") return logBindingDiagnostic(req);
         return json({ error: "Method not allowed." }, 405);
       }
 

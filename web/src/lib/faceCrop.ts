@@ -48,10 +48,35 @@ const PAD = 0.4;
  * than a permanent bad reference: the caller simply tries again on a later
  * frame, and the visitor is usually walking towards the kiosk anyway.
  */
-const MIN_FACE_PX = 110;
+export const MIN_FACE_PX = 110;
 
 /** JPEG quality. High: this image is re-embedded, not looked at. */
 const QUALITY = 0.92;
+
+/**
+ * Which check refused this frame.
+ *
+ * Null is an ordinary outcome here (see below), so the caller cannot tell a
+ * face that is too small from a video element that has not decoded yet — and
+ * those two want opposite responses: one is the visitor standing too far back,
+ * the other is a broken capture element that will never produce a photo no
+ * matter how close they come. The reason is reported rather than returned so
+ * that the null contract, which every caller already handles correctly, does
+ * not change shape for a diagnostic.
+ */
+export type CropRejection =
+  | "no-decoded-frame"
+  | "no-frame-size"
+  | "empty-box"
+  | "face-too-small"
+  | "padded-crop-too-small"
+  | "no-canvas-context";
+
+export interface CropRejectionInfo {
+  reason: CropRejection;
+  /** The measurement the refusal was made on, in video pixels, when there was one. */
+  facePx: number | null;
+}
 
 export interface CropFaceOptions {
   video: HTMLVideoElement;
@@ -59,6 +84,30 @@ export interface CropFaceOptions {
   box: Box;
   /** `Snapshot.frame` — the coordinate system `box` is expressed in. */
   frame: FrameSize;
+  /** Called with the reason whenever this function returns null. */
+  onReject?: (info: CropRejectionInfo) => void;
+}
+
+/**
+ * The face's size in video pixels — the exact quantity `cropFace` compares
+ * against MIN_FACE_PX, available without attempting a crop.
+ *
+ * Kept here rather than in the caller so the two cannot drift: a diagnostic
+ * that measures a face differently from the check it is explaining is worse
+ * than no diagnostic, because it reads as authoritative.
+ */
+export function faceSizeInVideoPixels(
+  video: HTMLVideoElement | null,
+  box: Box | null | undefined,
+  frame: FrameSize | null | undefined,
+): number | null {
+  if (!video?.videoWidth || !video.videoHeight) return null;
+  if (!frame?.w || !frame?.h || !box) return null;
+  const [, , bw, bh] = box;
+  if (!(bw > 0 && bh > 0)) return null;
+  return Math.round(
+    Math.min((bw * video.videoWidth) / frame.w, (bh * video.videoHeight) / frame.h),
+  );
 }
 
 /**
@@ -66,23 +115,34 @@ export interface CropFaceOptions {
  * produce a usable one. Null is an ordinary outcome, not an error: the caller
  * is sampling a live stream and can simply wait for a better frame.
  */
-export async function cropFace({ video, box, frame }: CropFaceOptions): Promise<Blob | null> {
+export async function cropFace({
+  video,
+  box,
+  frame,
+  onReject,
+}: CropFaceOptions): Promise<Blob | null> {
+  const reject = (reason: CropRejection, facePx: number | null = null): null => {
+    onReject?.({ reason, facePx });
+    return null;
+  };
+
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   // readyState < HAVE_CURRENT_DATA means there is no decoded frame to draw;
   // drawImage would silently paint nothing and we would enroll a black square.
-  if (!vw || !vh || video.readyState < 2) return null;
-  if (!frame?.w || !frame?.h) return null;
+  if (!vw || !vh || video.readyState < 2) return reject("no-decoded-frame");
+  if (!frame?.w || !frame?.h) return reject("no-frame-size");
 
   const [bx, by, bw, bh] = box;
-  if (!(bw > 0 && bh > 0)) return null;
+  if (!(bw > 0 && bh > 0)) return reject("empty-box");
 
   const scaleX = vw / frame.w;
   const scaleY = vh / frame.h;
 
   const faceW = bw * scaleX;
   const faceH = bh * scaleY;
-  if (Math.min(faceW, faceH) < MIN_FACE_PX) return null;
+  const facePx = Math.round(Math.min(faceW, faceH));
+  if (facePx < MIN_FACE_PX) return reject("face-too-small", facePx);
 
   const padX = faceW * PAD;
   const padY = faceH * PAD;
@@ -97,13 +157,18 @@ export async function cropFace({ video, box, frame }: CropFaceOptions): Promise<
 
   const width = right - left;
   const height = bottom - top;
-  if (width < MIN_FACE_PX || height < MIN_FACE_PX) return null;
+  if (width < MIN_FACE_PX || height < MIN_FACE_PX) {
+    // Distinct from face-too-small: the face is big enough, but it sits so
+    // close to the edge that the clamp above cut the padded region back below
+    // the floor. Someone standing off to one side, not someone too far away.
+    return reject("padded-crop-too-small", facePx);
+  }
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
+  if (!ctx) return reject("no-canvas-context", facePx);
 
   // No mirroring. The kiosk may present the camera flipped for a natural
   // selfie view, but that is a CSS transform on the element — the decoded
