@@ -227,6 +227,15 @@ static const char AP_HTML[] PROGMEM = R"html(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- Pins every relative URL below to the board itself. The captive-portal
+       DNS answers EVERY hostname with this IP, so the config page is commonly
+       reached at a probe hostname (www.msftconnecttest.com, connectivitycheck
+       .gstatic.com, captive.apple.com) rather than at 192.168.4.1 -- and a
+       relative action="/save" then resolves against THAT host. As soon as the
+       phone or laptop falls back to its real network, the POST leaves for the
+       real internet and the config is silently lost: the operator sees an
+       "Access Denied" page from a CDN and the board reboots unchanged. -->
+  <base href="http://%APIP%/">
   <title>HAICI Setup</title>
   <style>
     *{box-sizing:border-box}
@@ -301,6 +310,7 @@ static const char AP_HTML[] PROGMEM = R"html(
 
 static void handleAPRoot() {
   String html = FPSTR(AP_HTML);
+  html.replace("%APIP%",     WiFi.softAPIP().toString());
   html.replace("%SSID%",     cfg.wifiSsid);
   html.replace("%WSHOST%",   cfg.wsHost);
   html.replace("%WSPORT%",   String(cfg.wsPort));
